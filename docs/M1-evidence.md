@@ -16,9 +16,9 @@
 
 VeilLend's hard technical capability, demonstrated on a live network:
 
-1. A lending position's entire financial state (collateral, debt, interest
-   snapshot, control secret, salt) is stored **only** as a Poseidon
-   commitment on-chain.
+1. The confidential financial state is represented by a Poseidon commitment
+   on-chain, while separate public accounting variables enforce custody and
+   protocol-level limits.
 2. Every state change (deposit, repay, borrow, withdraw) requires a **real
    Groth16 proof** that the transition follows the protocol rules over the
    hidden state — verified by deployed Solidity verifiers.
@@ -120,9 +120,9 @@ mempool proof cannot redirect value.
 **Liquidation.** The liquidator proves the hidden position satisfies
 `collateralValue < debtValue · threshold` and the circuit computes the
 settlement (`collateralOut = hidden collateral`, `debtOut = min(hidden
-debt, oracle-parity)`) as public signals — the liquidator learns only what
-the token transfers reveal; the residual written-off debt and all other
-state remain hidden.
+debt, oracle-parity)`) as public signals — the liquidator learns the public settlement amounts
+(`collateralOut` and `debtOut`) required for settlement, but does not learn
+the position's full hidden collateral, debt, or residual debt state.
 
 ## 5. Deployed contract evidence
 
@@ -195,10 +195,12 @@ only; per-action amounts public (position privacy, not transaction privacy).
 ## 8. Milestone Status
 
 ### M1 — Prove the hard part
-**Status: COMPLETE (engineering/evidence perspective).**
-Private state as commitments, real ZK proofs over four circuits, on-chain
-verification by deployed verifiers, and a full confidential liquidation —
-all demonstrated on Horizen Testnet with recorded transactions and 111/111
+**Status: TECHNICAL OBJECTIVE DEMONSTRATED.**
+The M1 technical objective has been demonstrated end-to-end on Horizen
+Testnet: private state is represented through cryptographic commitments,
+real ZK proofs enforce state transitions and risk rules, deployed Solidity
+verifiers perform on-chain verification, and confidential liquidation has
+been successfully executed with recorded transaction evidence and 111/111
 local regression tests.
 
 ### M2 — Security Audit
