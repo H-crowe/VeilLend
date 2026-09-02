@@ -96,7 +96,7 @@ C2 = 197771297968216673016912965233884286485474023012893602948639453566512955047
 
 ## 4. Local regression status
 
-- **106/106 tests passing** (unit, circuit-level, solvency, risk,
+- **106/106 tests passing at the time of this evidence run** (the suite has since grown to 111/111 with the liquidation coverage and security-hardening tests) (unit, circuit-level, solvency, risk,
   liquidation, supported-collateral, recipient-binding adversarial A–I,
   seeded fuzz/invariant harness) — re-run after the on-chain test.
 - Clean Solidity build (19 files, zero warnings, `evmVersion: paris`).
@@ -111,7 +111,7 @@ on `PATH`), and `HORIZEN_TESTNET_PRIVATE_KEY` funded with testnet ETH in
 npm install
 npm run zk:build   # compile circuits → pot14 → zkeys → regenerate contracts/zk verifiers
 npm run build      # hardhat compile
-npm test           # 106 tests (local; CPU-heavy: ~4 min)
+npm test           # full suite, 111 tests (local; CPU-heavy: ~4-5 min)
 
 npx hardhat run scripts/verify-network.ts --network horizenTestnet   # read-only precheck
 npx hardhat run scripts/proof-test.ts   --network horizenTestnet   # the on-chain ZK proof test
@@ -137,7 +137,7 @@ To regenerate everything from scratch (including the trusted setup):
   custody/supported-collateral accounting) work on the live network.
 
 **Proven locally only (not yet exercised on the live deployment):**
-- Repay / borrow / liquidation flows (fully tested in the 106-test local
+- Repay / borrow / liquidation flows (fully tested in the local
   suite against the same bytecode; borrow additionally needs seeded
   debt-custody liquidity on-chain).
 - Solvency-proof verification endpoint (`verifySolvency`) and the F1–F5

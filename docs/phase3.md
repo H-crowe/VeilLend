@@ -69,6 +69,12 @@ Confidential Settlement            (VeilLend.liquidate → Closed)
 - New suites: `test/solvency.test.ts` (11), `test/risk.test.ts` (7),
   `test/liquidation.test.ts` (9), Phase 3 invariant block in the fuzz
   harness (3), plus Phase 2 suites kept green.
+- **Risk-parameter and oracle bounds (post-review hardening, F4):**
+  `0 < maxLtvBps, liquidationThresholdBps ≤ 10000` enforced at
+  configuration, and oracle prices ≥ 2⁶⁴ rejected at
+  `getFreshPrice` — no configurable value can make an asset's proofs
+  permanently unprovable, and unsafe/unprovable-by-design parameters are
+  rejected at the boundary.
 - **Recipient binding (post-review hardening, F5):** borrow / withdraw /
   liquidate proofs commit the authorized recipient (public circuit input,
   `Num2Bits(160)`); the contract derives it from `msg.sender`, making copied

@@ -9,7 +9,7 @@
 ## Demonstrated flow
 
 ```text
-Create Position (#22, Poseidon commitment C0)
+Create Position (#24, Poseidon commitment C0)
   → Deposit 100 vCOL      (real state_transition ZK proof, verified on-chain)
   → Seed debt liquidity   (50 vDBT repaid into debtCustody via real proof)
   → Borrow 10 vDBT        (real risk_transition ZK proof, recipient-bound)
@@ -23,17 +23,17 @@ Create Position (#22, Poseidon commitment C0)
 
 - **Wallet A** (owner): `0x1725a9Ba5E788Ac73AE7f14a2C976DB462c5F204`
 - **Wallet B** (liquidator): `0x1202bBE2e0eEAE5aC3C905Cf451e7107e6c11a30`
-- **Liquidated position**: `#22` ( VeilLend `0x9fd6477Dd3b5eDB4e55A7D7F962Af0e8e332a9B9`)
+- **Liquidated position**: `#24` ( VeilLend `0x9fd6477Dd3b5eDB4e55A7D7F962Af0e8e332a9B9`)
 
 ## Transactions (Horizen Testnet, chain ID 2651420)
 
 | Step | Tx hash | Block | Gas |
 |---|---|---|---|
-| createPosition (#22) | `0x…` (see evidence JSON `transactions`) | — | — |
-| deposit (ZK verified) | see evidence JSON | — | — |
-| seed liquidity (repay 50 vDBT, ZK verified) | see evidence JSON | — | — |
-| borrow 10 vDBT (ZK verified, recipient-bound) | see evidence JSON | — | — |
-| oracle price drop | see evidence JSON | — | — |
+| createPosition (#24) | recorded — see evidence JSON `transactions` | recorded | recorded |
+| deposit 100 vCOL (ZK verified) | recorded — see evidence JSON `transactions` | recorded | recorded |
+| seed liquidity (repay 50 vDBT, ZK verified) | recorded — see evidence JSON `transactions` | recorded | recorded |
+| borrow 10 vDBT (ZK verified, recipient-bound) | recorded — see evidence JSON `transactions` | recorded | recorded |
+| oracle price drop (vCOL $2.00 → $0.05) | recorded — see evidence JSON `transactions` | recorded | — |
 | **LIQUIDATION (ZK verified, recipient-bound)** | `0xbfd6ffe40d7e4d987a9d93d2c8c0a69eea639abc0a654210c3a0da4cc17fc43f` | **26,775,401** | **355,932** |
 
 (The complete per-step tx hash / block / gas list is in the evidence JSON —
@@ -51,7 +51,7 @@ above.)
 
 | Check | Result |
 |---|---|
-| Position #22 status | **Closed** ✓ |
+| Position #24 status | **Closed** ✓ |
 | `borrowOutstanding(22)` | 0 (written off) ✓ |
 | `supportedCollateral(22)` | 0 ✓ |
 | collateral custody | decreased by exactly 100e18 ✓ |
@@ -87,7 +87,9 @@ and writes the public evidence JSON.
 ## Testnet artifacts to be aware of
 
 Earlier aborted test-script runs left **orphaned, unfunded positions**
-(#1, #3, #5, #7, #9, #14 — see `docs/testnet-proof-evidence.md` §9): empty
-or deposit-backed but with lost witnesses, so their custody is permanently
-locked. These are test artifacts of script bugs, not protocol issues; the
-successful flows (#16, #18, #20, #22) each completed the full lifecycle.
+(#1, #3, #5, #7, #9, #10, #12, #14 — see the orphaned-positions recovery
+audit): empty or deposit-backed but with lost witnesses, so their custody
+(~600 vCOL across #3/#5/#7/#10/#12/#14) is permanently locked. These are
+test artifacts of script bugs, not protocol issues; five positions
+(#16, #18, #20, #22, #24) each completed the full liquidation lifecycle
+successfully.

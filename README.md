@@ -11,7 +11,7 @@ at the token layer — but never the resulting position: its total collateral,
 total debt, accrued interest, or health.
 
 **Status: Milestone 1 delivered.** The core private-lending primitive is
-implemented, covered by 106/106 local tests, **deployed on Horizen Testnet
+implemented, covered by 111/111 local tests, **deployed on Horizen Testnet
 (chain ID 2651420), and demonstrated end-to-end with real on-chain ZK proof
 verification** — see
 [docs/testnet-proof-evidence.md](docs/testnet-proof-evidence.md).
@@ -119,7 +119,7 @@ npm install
 # ZK toolchain: circom 2.2.x binary at tools/circom.exe or on PATH
 npm run zk:build    # compile circuits → pot14 → zkeys → regenerate Solidity verifiers
 npm run build       # hardhat compile
-npm test            # 106 tests — unit/ZK/solvency/risk/liquidation/adversarial/fuzz (~4 min)
+npm test            # 111 tests — unit/ZK/solvency/risk/liquidation/adversarial/fuzz (~5 min)
 npm run prove       # local end-to-end demo: witness → commitment → proof → verify
 
 # on-chain (requires funded HORIZEN_TESTNET_PRIVATE_KEY in .env — see .env.example)
