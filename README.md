@@ -53,6 +53,16 @@ On-chain verification → new commitment   (sequence +1, nullifier consumed)
 - **Replay protection** — Poseidon nullifiers, consumed only after
   verification; sequences advance by exactly one.
 
+## M1 — Horizen Testnet Proof
+
+**Milestone 1 is delivered with on-chain evidence:** the full private-lending
+lifecycle — commitment → real Groth16 deposit proof → borrow → oracle price
+drop → real liquidation proof → confidential settlement — was executed
+against the deployed VeilLend contracts on Horizen Testnet (chain ID
+2651420), with every state transition verified by the deployed verifiers.
+Addresses, transaction hashes, the commitment chain, and exact reproduction
+steps: **[docs/M1-evidence.md](docs/M1-evidence.md)**.
+
 ## Architecture & documentation
 
 | Document | Contents |
