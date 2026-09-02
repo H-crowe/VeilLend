@@ -1,0 +1,98 @@
+{
+  "network": "horizenTestnet",
+  "chainId": "2651420",
+  "deployer": "0x1725a9Ba5E788Ac73AE7f14a2C976DB462c5F204",
+  "deployedAt": "2026-09-02T00:51:02.973Z",
+  "addresses": {
+    "collateralToken": "0x281FbbeD6f2DEA61c86191EA92f2B9B9D2D66a3c",
+    "debtToken": "0xe27c05934Ad4046d72766808b30F0514e978f612",
+    "mockPriceOracle": "0xDA4CAA96D6fF78Af30A3955b5310BE9258d57Bc2",
+    "stateTransitionVerifier": "0x0D96E5a05d11c0839037488332CAd29E6Ef6686C",
+    "solvencyVerifier": "0xD33ce96e9A6AF2c8f5E7f73d5214eDf0c9eff24F",
+    "riskTransitionVerifier": "0x533Fd1381b7a3aAc107c07983bf82f6681D98b4a",
+    "liquidationVerifier": "0x4bf85D6D5f3A730280D707dB0D2d063940A80869",
+    "veilLend": "0x9fd6477Dd3b5eDB4e55A7D7F962Af0e8e332a9B9"
+  },
+  "deploymentLog": [
+    {
+      "label": "TokenMock (collateral)",
+      "address": "0x281FbbeD6f2DEA61c86191EA92f2B9B9D2D66a3c",
+      "txHash": "0x895401c0b22e075e5085e3019e3ffce44c3a2929c2795796db5df7a6923e450c",
+      "block": "26721040",
+      "gasUsed": "526852"
+    },
+    {
+      "label": "TokenMock (debt)",
+      "address": "0xe27c05934Ad4046d72766808b30F0514e978f612",
+      "txHash": "0xf4780451d7caf63a54f4b68a42af720df573227e9399eb2b5c4576d7005c2c65",
+      "block": "26721042",
+      "gasUsed": "526780"
+    },
+    {
+      "label": "MockPriceOracle",
+      "address": "0xDA4CAA96D6fF78Af30A3955b5310BE9258d57Bc2",
+      "txHash": "0x65dff76ed86e318d666a39c03f26433d6156fa1a7ac7806b6b0694d6f3b5db56",
+      "block": "26721045",
+      "gasUsed": "153257"
+    },
+    {
+      "label": "Groth16Verifier",
+      "address": "0x0D96E5a05d11c0839037488332CAd29E6Ef6686C",
+      "txHash": "0xbad7cc28823aa79221e636aefb6447c2312de3c087bf97e49bff885a0f316466",
+      "block": "26721049",
+      "gasUsed": "511389"
+    },
+    {
+      "label": "SolvencyVerifier",
+      "address": "0xD33ce96e9A6AF2c8f5E7f73d5214eDf0c9eff24F",
+      "txHash": "0x539f081b6f4e14b814a8f8348a975a42f54f40a0abbb79dba4ae3e9139d0feb9",
+      "block": "26721053",
+      "gasUsed": "430614"
+    },
+    {
+      "label": "RiskTransitionVerifier",
+      "address": "0x533Fd1381b7a3aAc107c07983bf82f6681D98b4a",
+      "txHash": "0x47cdc15faeb9cc43576902090050f03a8cf562516fa78b98c10c1379d11ea212",
+      "block": "26721057",
+      "gasUsed": "593197"
+    },
+    {
+      "label": "LiquidationVerifier",
+      "address": "0x4bf85D6D5f3A730280D707dB0D2d063940A80869",
+      "txHash": "0xbd6e5b78b8379e4ba10ed4d051f48773579c6b5e329d846e60e70fb915bd09b2",
+      "block": "26721059",
+      "gasUsed": "490593"
+    },
+    {
+      "label": "VeilLend",
+      "address": "0x9fd6477Dd3b5eDB4e55A7D7F962Af0e8e332a9B9",
+      "txHash": "0x51d79b863e45e4ae758cd764e8526dd49fab98b20bd4be2424f2eac5e573aef3",
+      "block": "26721061",
+      "gasUsed": "3109626"
+    },
+    {
+      "label": "enableCollateralAsset",
+      "txHash": "0x7850c91fe3f90a6c953b3f5428754af69d83337577f678a524aceab2271551f1",
+      "block": "26721064",
+      "gasUsed": "47658"
+    },
+    {
+      "label": "enableDebtAsset",
+      "txHash": "0x3a767b8d9f315e4c2d71a79c410bc3fe234440dca3000ca8d3a160cbca2c8233",
+      "block": "26721068",
+      "gasUsed": "142911"
+    },
+    {
+      "label": "oracle.setPrice(collateral)",
+      "txHash": "0x8189dbac0a5dd36b207bbb186a9f82c12d4a028886ce8520becbd1661fa9cd79",
+      "block": "26721071",
+      "gasUsed": "66249"
+    },
+    {
+      "label": "oracle.setPrice(debt)",
+      "txHash": "0x7ecc270e1224a1b2d4218b95c3b8c835ea364d0c6fd283223b980caa7846c596",
+      "block": "26721074",
+      "gasUsed": "66237"
+    }
+  ]
+}

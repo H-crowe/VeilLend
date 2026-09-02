@@ -1,0 +1,44 @@
+{
+  "network": "horizenTestnet",
+  "chainId": "2651420",
+  "contracts": {
+    "veilLend": "0x9fd6477Dd3b5eDB4e55A7D7F962Af0e8e332a9B9",
+    "stateTransitionVerifier": "0x0D96E5a05d11c0839037488332CAd29E6Ef6686C",
+    "riskTransitionVerifier": "0x533Fd1381b7a3aAc107c07983bf82f6681D98b4a",
+    "collateralToken": "0x281FbbeD6f2DEA61c86191EA92f2B9B9D2D66a3c",
+    "debtToken": "0xe27c05934Ad4046d72766808b30F0514e978f612"
+  },
+  "positionId": "2",
+  "commitments": {
+    "C0": "9498478820913575246157620662779099336911672124961233694062922867225704157547",
+    "C1": "8932868119535140476080033462695729124242989530078434323614105386508226739808",
+    "C2": "19777129796821667301691296523388428648547402301289360294863945356651295504709"
+  },
+  "transactions": [
+    {
+      "label": "createPosition",
+      "txHash": "0x17796ffbd9671b027e98b8295b8d8f6fe3dee7b0e1ef4be8803358b21ae3acbc",
+      "block": "26721799",
+      "gasUsed": "148938"
+    },
+    {
+      "label": "deposit (ZK verified on-chain)",
+      "txHash": "0x5e50000ad35435fe947d94e5d56272b0dfbbbb2fc2789a24454a9186df57d4c8",
+      "block": "26721810",
+      "gasUsed": "410361"
+    },
+    {
+      "label": "withdraw (ZK verified on-chain, recipient-bound)",
+      "txHash": "0xc0a429d678c8e53520ef9f9141195aee407dd31bbd6720b0a21943d5e921e4b8",
+      "block": "26721815",
+      "gasUsed": "387547"
+    }
+  ],
+  "onChainChecks": {
+    "finalCommitmentMatchesC2": true,
+    "sequence": "2",
+    "nullifiersConsumed": 2,
+    "custodyConserved": true,
+    "supportedRestored": true
+  }
+}
