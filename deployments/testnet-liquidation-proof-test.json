@@ -1,0 +1,111 @@
+{
+  "network": "horizenTestnet",
+  "chainId": "2651420",
+  "walletA": "0x1725a9Ba5E788Ac73AE7f14a2C976DB462c5F204",
+  "walletB": {
+    "vCOLBefore": "400000000000000000000",
+    "vCOLAfter": "500000000000000000000",
+    "vDBTBefore": "10000000000000000000",
+    "vDBTAfter": "5000000000000000000"
+  },
+  "contracts": {
+    "collateralToken": "0x281FbbeD6f2DEA61c86191EA92f2B9B9D2D66a3c",
+    "debtToken": "0xe27c05934Ad4046d72766808b30F0514e978f612",
+    "mockPriceOracle": "0xDA4CAA96D6fF78Af30A3955b5310BE9258d57Bc2",
+    "stateTransitionVerifier": "0x0D96E5a05d11c0839037488332CAd29E6Ef6686C",
+    "solvencyVerifier": "0xD33ce96e9A6AF2c8f5E7f73d5214eDf0c9eff24F",
+    "riskTransitionVerifier": "0x533Fd1381b7a3aAc107c07983bf82f6681D98b4a",
+    "liquidationVerifier": "0x4bf85D6D5f3A730280D707dB0D2d063940A80869",
+    "veilLend": "0x9fd6477Dd3b5eDB4e55A7D7F962Af0e8e332a9B9"
+  },
+  "positionId": "24",
+  "commitments": {
+    "C0": "5928707064183159884416149734455357993046933173390866259546486392763694078387",
+    "C_afterBorrow": "0x14815502b8673c57c78382add9a1cf46f1eaaee0fcc24983805f837290a3d1fb",
+    "final": "0x14815502b8673c57c78382add9a1cf46f1eaaee0fcc24983805f837290a3d1fb",
+    "note": "liquidation does not advance the commitment; position is Closed"
+  },
+  "transactions": [
+    {
+      "label": "createPosition",
+      "positionId": "24",
+      "txHash": "0xe248619e4ff50b4495a8cd8ef5a03f6ee12ea2fb7ee828b0ddbd9192fb4f286a",
+      "block": "26775346",
+      "gasUsed": "148938"
+    },
+    {
+      "label": "deposit (ZK verified)",
+      "positionId": "24",
+      "txHash": "0x4e98d86c8277f0728999ca4bc7fc2c370f35abd818586297b85dadab09f32184",
+      "block": "26775360",
+      "gasUsed": "371337"
+    },
+    {
+      "label": "seed liquidity (repay 50 vDBT)",
+      "txHash": "0x93217583bc1668844fd3ab5429c60cb81613b40ae97f05c459050cd16cb81f2e",
+      "block": "26775374",
+      "gasUsed": "354355"
+    },
+    {
+      "label": "borrow (ZK verified, recipient-bound)",
+      "positionId": "24",
+      "txHash": "0x2652ce48123554474a146bc17a79f63e5f46034da6256c5914a63007c7039fe5",
+      "block": "26775388",
+      "gasUsed": "421662"
+    },
+    {
+      "label": "oracle price drop vCOL $2→$0.05",
+      "txHash": "0xeb5d094e92e7a981a7871d595eb9553e6e892709c6f26cd30fbc27d8273f3624",
+      "block": "26775394"
+    },
+    {
+      "label": "LIQUIDATION (ZK verified, recipient=Wallet B)",
+      "positionId": "24",
+      "txHash": "0xbfd6ffe40d7e4d987a9d93d2c8c0a69eea639abc0a654210c3a0da4cc17fc43f",
+      "block": "26775401",
+      "gasUsed": "355932"
+    }
+  ],
+  "oracle": {
+    "vCOLBefore": "200000000",
+    "vCOLAfter": "5000000",
+    "vDBT": "100000000"
+  },
+  "settlement": {
+    "collateralOut": "100000000000000000000",
+    "debtOut": "5000000000000000000",
+    "badDebtWrittenOff": "5000000000000000000"
+  },
+  "positionBefore": {
+    "status": "Active",
+    "sequence": "2",
+    "supportedCollateral": "100000000000000000000",
+    "borrowOutstanding": "10000000000000000000",
+    "activeCommitment": "0x14815502b8673c57c78382add9a1cf46f1eaaee0fcc24983805f837290a3d1fb"
+  },
+  "positionAfter": {
+    "status": "Closed",
+    "borrowOutstanding": "0",
+    "supportedCollateral": "0",
+    "activeCommitment": "0x14815502b8673c57c78382add9a1cf46f1eaaee0fcc24983805f837290a3d1fb"
+  },
+  "custody": {
+    "collateralCustodyBefore": "600000000000000000000",
+    "collateralCustodyAfter": "600000000000000000000",
+    "debtCustodyAfterSeed": "410000000000000000000",
+    "debtCustodyAfterBorrow": "400000000000000000000",
+    "debtCustodyAfterLiquidation": "405000000000000000000"
+  },
+  "liquidationEvent": {
+    "name": "Liquidated",
+    "args": {
+      "positionId": "24",
+      "collateralAsset": "0x281FbbeD6f2DEA61c86191EA92f2B9B9D2D66a3c",
+      "debtAsset": "0xe27c05934Ad4046d72766808b30F0514e978f612",
+      "collateralOut": "100000000000000000000",
+      "debtOut": "5000000000000000000"
+    }
+  },
+  "proofVerifiedOnChain": true,
+  "replayAttemptResult": "reverted (PositionNotActive expected)"
+}
