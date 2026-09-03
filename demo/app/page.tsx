@@ -157,6 +157,10 @@ export default function Page() {
                 <div className="hint">Supported collateral (public): {fmtTokens(oc.supported)} vCOL</div>
                 <div className="hint">Outstanding borrow (public): {fmtTokens(oc.outstanding)} vDBT</div>
               </div>
+              <div className="footnote" style={{ marginTop: 6 }}>
+                Borrow rule (deployed circuit): a borrow may not exceed this position&apos;s hidden collateral and must
+                keep it solvent at current oracle prices (max LTV 75%).
+              </div>
             </section>
           )}
 
@@ -188,14 +192,16 @@ export default function Page() {
           {/* test assets */}
           <section className="panel">
             <div className="panel-title">Testnet assets (test-only)</div>
-            <div className="actions" style={{ gridTemplateColumns: "1fr 1fr 1fr" }}>
+            <div className="actions" style={{ gridTemplateColumns: "1fr 1fr 1fr 1fr" }}>
               <button className="action-btn" disabled={busy || !v.isConnected} onClick={() => v.mintTestTokens("vCOL", 100n * 10n ** 18n)}>Mint 100 vCOL</button>
               <button className="action-btn" disabled={busy || !v.isConnected} onClick={() => v.mintTestTokens("vDBT", 50n * 10n ** 18n)}>Mint 50 vDBT</button>
               <button className="action-btn" disabled={busy || !v.isConnected} onClick={() => v.seedLiquidity(20n * 10n ** 18n)}>Seed 20 vDBT liquidity</button>
+              <button className="action-btn" disabled={busy || !v.isConnected} onClick={() => v.refreshOraclePrices().catch(() => { /* surfaced via tx state */ })}>Refresh oracle prices</button>
             </div>
             <div className="footnote">
               Seeding liquidity mints vDBT and repays it into the protocol reserve — the M1 design funds
-              borrows from repayments.
+              borrows from repayments. Borrow/withdraw/liquidate require fresh oracle prices (1h limit on
+              the mock testnet oracle) — refresh them here when they go stale.
             </div>
           </section>
 

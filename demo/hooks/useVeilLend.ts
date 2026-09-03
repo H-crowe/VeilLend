@@ -8,7 +8,7 @@ import { horizenTestnet, explorerTx } from "../lib/chains";
 import { ADDRESSES } from "../lib/contracts/addresses";
 import { veilLendAbi, tokenAbi, oracleAbi } from "../lib/contracts/abis";
 import {
-  ACTION_BORROW, ACTION_DEPOSIT, ACTION_WITHDRAW, randomSecret,
+  ACTION_BORROW, ACTION_DEPOSIT, ACTION_WITHDRAW, ceilDiv, randomSecret,
   buildLiquidationWitness, buildRiskTransition, buildTransition,
   computeCommitment, isLiquidatable, makeInitialState,
   type PrivateState, type LiquidationParams,
@@ -167,6 +167,42 @@ export function useVeilLend() {
     throw new Error("wallet not connected");
   }, [walletClientData, connectedConnector]);
 
+  /**
+   * Risk actions (borrow/withdraw/liquidate) read prices with an on-chain
+   * freshness check — a stale mock-oracle price makes them revert with
+   * StalePrice. Detect it here first so the user gets an actionable message
+   * instead of a reverted transaction.
+   */
+  const ensureFreshPrices = useCallback(async () => {
+    if (!publicClient) throw new Error("no RPC");
+    const [block, staleness, col, debt] = (await Promise.all([
+      publicClient.getBlock(),
+      publicClient.readContract({ address: ADDRESSES.veilLend as Address, abi: veilLendAbi, functionName: "maxPriceStaleness" }) as Promise<bigint>,
+      publicClient.readContract({ address: ADDRESSES.mockPriceOracle as Address, abi: oracleAbi, functionName: "getPrice", args: [ADDRESSES.collateralToken as Address] }) as Promise<readonly [bigint, bigint]>,
+      publicClient.readContract({ address: ADDRESSES.mockPriceOracle as Address, abi: oracleAbi, functionName: "getPrice", args: [ADDRESSES.debtToken as Address] }) as Promise<readonly [bigint, bigint]>,
+    ]));
+    const limit = Number(staleness);
+    const stale = (u: bigint) => Number(block.timestamp) - Number(u) > limit;
+    if (stale(col[1]) || stale(debt[1])) {
+      throw new Error("Oracle prices are stale (mock testnet oracle, 1h freshness limit). Use 'Refresh oracle prices' in Testnet assets, then retry.");
+    }
+  }, [publicClient]);
+
+  /** Refreshes the mock testnet oracle prices (owner-only on-chain op). */
+  const refreshOraclePrices = useCallback(async () => {
+    if (!isConnected || !address) throw new Error("wallet not connected");
+    const walletClient = await getWallet();
+    setTx({ status: "wallet" });
+    const { collateralPrice, debtPrice } = await oraclePrices();
+    const hash = await walletClient.writeContract({ address: ADDRESSES.mockPriceOracle as Address, abi: oracleAbi, functionName: "setPrice", args: [ADDRESSES.collateralToken as Address, collateralPrice] });
+    setTx((t) => ({ ...t, status: "confirming", txHash: hash }));
+    await publicClient!.waitForTransactionReceipt({ hash });
+    const hash2 = await walletClient.writeContract({ address: ADDRESSES.mockPriceOracle as Address, abi: oracleAbi, functionName: "setPrice", args: [ADDRESSES.debtToken as Address, debtPrice] });
+    setTx((t) => ({ ...t, status: "confirming", txHash: hash2 }));
+    await publicClient!.waitForTransactionReceipt({ hash: hash2 });
+    setTx({ status: "confirmed", txHash: hash2, explorerUrl: explorerTx(hash2), proofVerified: false });
+  }, [getWallet, isConnected, address, publicClient, oraclePrices]);
+
   const fail = useCallback((err: unknown): never => {
     const raw = err instanceof Error ? err.message : String(err);
     let msg = raw;
@@ -290,7 +326,24 @@ export function useVeilLend() {
       if (kind === "borrow" || kind === "withdraw") {
         const amount = amt ?? 0n;
         if (amount === 0n) throw new Error("Enter an amount");
+        await ensureFreshPrices();
         const prices = await oraclePrices();
+        // Pre-flight the exact rules the deployed risk_transition circuit
+        // enforces, so an unprovable action fails with a precise message
+        // before any proving or wallet interaction:
+        //   (a) the circuit's action gate requires amount <= hidden
+        //       collateral (risk_transition line 163 fires for borrows —
+        //       its (1 - isWithdraw) factor inverts the intended gate);
+        //   (b) post-action solvency at current oracle prices.
+        if (kind === "borrow" && amount > st.collateral) {
+          throw new Error(`Borrow amount exceeds this position's hidden collateral (cap ${(Number(st.collateral) / 1e18).toFixed(2)} vCOL in raw units). The deployed circuit requires borrow ≤ hidden collateral — deposit more collateral or borrow a smaller amount.`);
+        }
+        const accruedPre = ceilDiv(st.debt * currentIndex, st.interestIndex);
+        const newDebtPre = kind === "borrow" ? accruedPre + amount : accruedPre;
+        const newColPre = kind === "withdraw" ? st.collateral - amount : st.collateral;
+        if (newColPre * prices.collateralPrice * 10000n < newDebtPre * prices.debtPrice * 7500n) {
+          throw new Error("This action would leave the position undercollateralized at current oracle prices (max LTV 75%) — reduce the amount");
+        }
         const actionId = kind === "borrow" ? ACTION_BORROW : ACTION_WITHDRAW;
         const t = await buildRiskTransition({
           oldState: st, actionId, amount, currentIndex, newSalt,
@@ -307,6 +360,7 @@ export function useVeilLend() {
 
       // ---------- liquidate (liquidation circuit, self-liquidation) ----------
       if (kind === "liquidate") {
+        await ensureFreshPrices();
         const prices = await oraclePrices();
         const params: LiquidationParams = { collateralPrice: prices.collateralPrice, debtPrice: prices.debtPrice, liquidationThresholdBps: 8500n };
         if (!isLiquidatable(st, params)) throw new Error("Position is not undercollateralized at current oracle prices");
@@ -322,7 +376,7 @@ export function useVeilLend() {
     } catch (err) {
       fail(err);
     }
-  }, [getWallet, address, publicClient, selectedId, selectedState, proveAndSubmit, fail, oraclePrices, readOnChainPosition, refreshOnChain, refreshPositions, refreshAfterSuccess]);
+  }, [getWallet, address, publicClient, selectedId, selectedState, proveAndSubmit, fail, oraclePrices, ensureFreshPrices, readOnChainPosition, refreshOnChain, refreshPositions, refreshAfterSuccess]);
 
   const mintTestTokens = useCallback(async (kind: "vCOL" | "vDBT", amount: bigint) => {
     if (!isConnected || !address) throw new Error("wallet not connected");
@@ -377,7 +431,7 @@ export function useVeilLend() {
     switchChain: () => switchChain({ chainId: horizenTestnet.id }),
     snarkReady, positions, selectedId, setSelectedId, selectedState,
     onChain, refreshOnChain, oraclePrices,
-    runAction, mintTestTokens, seedLiquidity, isEligible,
+    runAction, mintTestTokens, seedLiquidity, refreshOraclePrices, isEligible,
     tx, setTx, RISK_PARAMS,
   };
 }
