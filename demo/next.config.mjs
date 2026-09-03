@@ -14,6 +14,8 @@ const nextConfig = {
       "@coinbase/cdp-sdk": false,
       "@walletconnect/universal-provider": false,
       "@walletconnect/ethereum-provider": false,
+      "@metamask/sdk": false,
+      "@react-native-async-storage/async-storage": false,
     };
     return config;
   },

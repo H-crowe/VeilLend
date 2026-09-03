@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAccount, useConnect, usePublicClient, useSwitchChain, useWalletClient } from "wagmi";
+import { getWalletClient as getWagmiWalletClient } from "@wagmi/core";
 import type { Address } from "viem";
 import { horizenTestnet, explorerTx } from "../lib/chains";
 import { ADDRESSES } from "../lib/contracts/addresses";
@@ -14,6 +15,7 @@ import {
 } from "../lib/zk/witness";
 import type { CircuitName } from "../lib/zk/snarkjs";
 import { deserializeState, serializeState, listPositions, savePosition, getPosition, type StoredPosition } from "../lib/state/store";
+import { wagmiConfig } from "../app/providers";
 
 const WAD = 10n ** 18n;
 const PRICE_SCALE = 10n ** 8n;
@@ -54,12 +56,12 @@ function toTransitionInputs(ps: string[]) {
 }
 
 export function useVeilLend() {
-  const { address, isConnected, chainId } = useAccount();
+  const { address, isConnected, chainId, connector: connectedConnector } = useAccount();
   const onHorizen = chainId === horizenTestnet.id;
   const publicClient = usePublicClient();
   const { connect, connectors } = useConnect();
   const { switchChain } = useSwitchChain();
-  const { data: walletClient } = useWalletClient();
+  const { data: walletClientData } = useWalletClient();
 
   const [snarkReady, setSnarkReady] = useState(false);
   const [positions, setPositions] = useState<StoredPosition[]>([]);
@@ -120,6 +122,24 @@ export function useVeilLend() {
     return { collateralPrice: col[0], debtPrice: debt[0] };
   }, [publicClient]);
 
+  /**
+   * Resilient wallet-client access. wagmi can transiently report
+   * `walletClient === undefined` (e.g. right after a failed tx reconnects
+   * the connector) even though a connector IS connected — in that case we
+   * re-acquire the client from the connected connector instead of throwing.
+   */
+  const getWallet = useCallback(async () => {
+    if (walletClientData) return walletClientData;
+    if (connectedConnector) {
+      try {
+        // canonical wagmi action: re-acquire the wallet client through the
+        // connected connector (handles transient undefined after failures)
+        return await getWagmiWalletClient(wagmiConfig, { chainId: horizenTestnet.id, connector: connectedConnector });
+      } catch { /* fall through */ }
+    }
+    throw new Error("wallet not connected");
+  }, [walletClientData, connectedConnector]);
+
   const fail = useCallback((err: unknown): never => {
     const raw = err instanceof Error ? err.message : String(err);
     let msg = raw;
@@ -143,6 +163,7 @@ export function useVeilLend() {
     circuit: CircuitName,
     publicSignals: string[],
     inputs: Record<string, string>,
+    walletClient: NonNullable<typeof walletClientData>,
     extraArgs?: { collateralOut: bigint; debtOut: bigint }
   ) => {
     setTx((t) => ({ ...t, status: "proving" }));
@@ -164,10 +185,11 @@ export function useVeilLend() {
     setTx((t) => ({ ...t, status: "confirming", txHash: hash }));
     const rec = await publicClient!.waitForTransactionReceipt({ hash });
     return { hash, block: Number(rec.blockNumber), gasUsed: rec.gasUsed.toString() };
-  }, [publicClient, walletClient]);
+  }, [publicClient]);
 
   const runAction = useCallback(async (kind: ActionKind, amt: bigint | null) => {
-    if (!walletClient || !address || !publicClient) throw new Error("wallet not connected");
+    if (!isConnected || !address || !publicClient) throw new Error("wallet not connected");
+    const walletClient = await getWallet();
     setTx({ status: "preparing" });
     try {
       // ---------- create ----------
@@ -208,7 +230,7 @@ export function useVeilLend() {
         if (amount === 0n) throw new Error("Enter an amount");
         const actionId = kind === "deposit" ? ACTION_DEPOSIT : 2n;
         const t = await buildTransition({ oldState: st, actionId, amount, currentIndex, newSalt });
-        const res = await proveAndSubmit(fnFor(kind), "state_transition", t.publicSignals, t.inputs);
+        const res = await proveAndSubmit(fnFor(kind), "state_transition", t.publicSignals, t.inputs, walletClient);
         const stored = getPosition(address, positionId);
         if (stored) savePosition(address, { ...stored, state: serializeState(t.newState) });
         setTx({ status: "confirmed", txHash: res.hash, block: res.block, gasUsed: res.gasUsed, explorerUrl: explorerTx(res.hash), proofVerified: true });
@@ -227,7 +249,7 @@ export function useVeilLend() {
           params: { collateralPrice: prices.collateralPrice, debtPrice: prices.debtPrice, maxLtvBps: 7500n },
           recipient: BigInt(address),
         });
-        const res = await proveAndSubmit(fnFor(kind), "risk_transition", t.publicSignals, t.inputs);
+        const res = await proveAndSubmit(fnFor(kind), "risk_transition", t.publicSignals, t.inputs, walletClient);
         const stored = getPosition(address, positionId);
         if (stored) savePosition(address, { ...stored, state: serializeState(t.newState) });
         setTx({ status: "confirmed", txHash: res.hash, block: res.block, gasUsed: res.gasUsed, explorerUrl: explorerTx(res.hash), proofVerified: true });
@@ -241,7 +263,7 @@ export function useVeilLend() {
         const params: LiquidationParams = { collateralPrice: prices.collateralPrice, debtPrice: prices.debtPrice, liquidationThresholdBps: 8500n };
         if (!isLiquidatable(st, params)) throw new Error("Position is not undercollateralized at current oracle prices");
         const w = await buildLiquidationWitness(st, params, BigInt(address));
-        const res = await proveAndSubmit("liquidate", "liquidation", w.publicSignals, w.inputs, { collateralOut: w.amounts.collateralOut, debtOut: w.amounts.debtOut });
+        const res = await proveAndSubmit("liquidate", "liquidation", w.publicSignals, w.inputs, walletClient, { collateralOut: w.amounts.collateralOut, debtOut: w.amounts.debtOut });
         const stored = getPosition(address, positionId);
         if (stored) savePosition(address, { ...stored, state: serializeState({ ...st, collateral: 0n }) });
         setTx({ status: "confirmed", txHash: res.hash, block: res.block, gasUsed: res.gasUsed, explorerUrl: explorerTx(res.hash), proofVerified: true });
@@ -252,20 +274,22 @@ export function useVeilLend() {
     } catch (err) {
       fail(err);
     }
-  }, [walletClient, address, publicClient, selectedId, selectedState, proveAndSubmit, fail, oraclePrices, readOnChainPosition, refreshOnChain, refreshPositions]);
+  }, [getWallet, address, publicClient, selectedId, selectedState, proveAndSubmit, fail, oraclePrices, readOnChainPosition, refreshOnChain, refreshPositions]);
 
   const mintTestTokens = useCallback(async (kind: "vCOL" | "vDBT", amount: bigint) => {
-    if (!walletClient || !address) throw new Error("wallet not connected");
+    if (!isConnected || !address) throw new Error("wallet not connected");
+    const walletClient = await getWallet();
     const token = kind === "vCOL" ? ADDRESSES.collateralToken : ADDRESSES.debtToken;
     setTx({ status: "wallet" });
     const hash = await walletClient.writeContract({ address: token as Address, abi: tokenAbi, functionName: "mint", args: [address, amount] });
     setTx((t) => ({ ...t, status: "confirming", txHash: hash }));
     await publicClient!.waitForTransactionReceipt({ hash });
     setTx({ status: "confirmed", txHash: hash, explorerUrl: explorerTx(hash), proofVerified: false });
-  }, [walletClient, address, publicClient]);
+  }, [getWallet, address, publicClient]);
 
   const seedLiquidity = useCallback(async (amount: bigint) => {
-    if (!walletClient || !address || !publicClient) throw new Error("wallet not connected");
+    if (!isConnected || !address || !publicClient) throw new Error("wallet not connected");
+    const walletClient = await getWallet();
     setTx({ status: "preparing" });
     try {
       // vDBT for the repay must be available
@@ -285,12 +309,12 @@ export function useVeilLend() {
       };
       await walletClient.writeContract({ address: ADDRESSES.veilLend as Address, abi: veilLendAbi, functionName: "createPosition", args: [ADDRESSES.collateralToken as Address, ADDRESSES.debtToken as Address, bytes32(await computeCommitment(seedState))] });
       const t = await buildTransition({ oldState: seedState, actionId: 2n, amount, currentIndex, newSalt: randomSecret() });
-      const res = await proveAndSubmit("repay", "state_transition", t.publicSignals, t.inputs);
+      const res = await proveAndSubmit("repay", "state_transition", t.publicSignals, t.inputs, walletClient);
       setTx({ status: "confirmed", txHash: res.hash, block: res.block, gasUsed: res.gasUsed, explorerUrl: explorerTx(res.hash), proofVerified: true });
     } catch (err) {
       fail(err);
     }
-  }, [walletClient, address, publicClient, proveAndSubmit, fail]);
+  }, [getWallet, address, publicClient, proveAndSubmit, fail]);
 
   const isEligible: boolean | null = useMemo(() => {
     if (!selectedState || !onChain || onChain.status !== 1) return null;
@@ -300,6 +324,7 @@ export function useVeilLend() {
   return {
     address, isConnected, onHorizen,
     connect: () => connect({ connector: connectors[0] }),
+    getWallet,
     connectorName: connectors[0]?.name ?? "Injected",
     switchChain: () => switchChain({ chainId: horizenTestnet.id }),
     snarkReady, positions, selectedId, setSelectedId, selectedState,
