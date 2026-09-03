@@ -71,6 +71,15 @@ export function getLastSelected(address: string): string | null {
   return window.localStorage.getItem(LAST_SELECTED_PREFIX + address.toLowerCase());
 }
 
+/** Wipes every private-state key for a wallet (recovery-test flow). */
+export function clearLocalState(address: string): void {
+  if (typeof window === "undefined") return;
+  const prefixes = [KEY_PREFIX + address.toLowerCase(), LAST_SELECTED_PREFIX + address.toLowerCase()];
+  for (const k of Object.keys(window.localStorage)) {
+    if (prefixes.some((p) => k.startsWith(p))) window.localStorage.removeItem(k);
+  }
+}
+
 /** Serializes a private state for storage (string-encoded field elements). */
 export function serializeState(state: PrivateState): StoredPosition["state"] {
   return {
