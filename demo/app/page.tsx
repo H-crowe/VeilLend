@@ -13,6 +13,13 @@ function parseAmount(s: string): bigint {
 }
 
 export default function Page() {
+  // wagmi restores wallet state from localStorage during the first client
+  // render, which cannot match the server prerender. Gate the dynamic UI
+  // behind a mounted flag so the hydration render is identical on server
+  // and client; dynamic content renders only after hydration completes.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
   const v = useVeilLend();
   const [amountDeposit, setAmountDeposit] = useState("10");
   const [amountBorrow, setAmountBorrow] = useState("5");
@@ -26,6 +33,26 @@ export default function Page() {
   async function act(kind: ActionKind, amountStr?: string) {
     const amount = amountStr ? parseAmount(amountStr) : null;
     try { await v.runAction(kind, amount); } catch { /* surfaced via tx state */ }
+  }
+
+  if (!mounted) {
+    return (
+      <div className="container">
+        <header className="header">
+          <div className="brand">
+            <span className="brand-name">VeilLend</span>
+            <span className="brand-tag">Confidential lending</span>
+          </div>
+          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            <span className="net-badge">Horizen Testnet · 2651420</span>
+          </div>
+        </header>
+        <section className="hero">
+          <h1>Private lending, without public positions.</h1>
+          <p>Your financial state stays private.<br />The protocol still proves what matters.</p>
+        </section>
+      </div>
+    );
   }
 
   return (

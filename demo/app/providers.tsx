@@ -10,6 +10,11 @@ export const wagmiConfig = createConfig({
   chains: [horizenTestnet],
   connectors: [injected({ shimDisconnect: true })],
   transports: { [horizenTestnet.id]: http("https://horizen-testnet.rpc.caldera.xyz/http") },
+  // Required for Next.js App Router: during the hydration render wagmi must
+  // return the server snapshot (disconnected) rather than connector state
+  // restored from localStorage, otherwise the hydration render cannot match
+  // the server HTML.
+  ssr: true,
 });
 
 const queryClient = new QueryClient();
