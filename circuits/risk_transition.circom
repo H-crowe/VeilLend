@@ -156,11 +156,14 @@ template RiskTransition() {
     isBorrow + isWithdraw === 1;
 
     // ---- transition rules
-    // withdraw: amount must not exceed hidden collateral
+    // withdraw: amount must not exceed hidden collateral. The gate below
+    // fires exactly when isWithdraw == 1 (for borrows the product is 0 by
+    // construction), so borrows are governed solely by the post-action
+    // solvency check further down.
     component amtLeCol = LessEqThan(128);
     amtLeCol.in[0] <== amount;
     amtLeCol.in[1] <== oldCollateral;
-    (1 - isWithdraw) * (1 - amtLeCol.out) === 0; // enforced only for withdraw
+    isWithdraw * (1 - amtLeCol.out) === 0; // enforced only for withdraw
 
     signal newCollateral;
     newCollateral <== oldCollateral - isWithdraw * amount;

@@ -205,15 +205,6 @@ export async function buildRiskTransition(req: {
   let newCollateral = s.collateral;
   let newDebt = accruedDebt;
   if (req.actionId === ACTION_BORROW) {
-    // The deployed risk_transition circuit enforces amount <= oldCollateral
-    // for borrows too (its action gate reads (1 - isWithdraw) * (1 -
-    // amtLeCol.out) === 0, which fires when isWithdraw === 0). Mirror that
-    // rule here so an unprovable borrow fails with a clear message instead
-    // of a raw wasm assert; the circuit cannot be edited without a new
-    // verifier deployment.
-    if (req.amount > s.collateral) {
-      throw new Error("borrow amount exceeds this position's hidden collateral — the deployed circuit requires borrow ≤ hidden collateral; deposit more collateral or borrow a smaller amount");
-    }
     newDebt = accruedDebt + req.amount;
   } else if (req.actionId === ACTION_WITHDRAW) {
     if (req.amount > s.collateral) throw new Error("withdraw exceeds hidden collateral");

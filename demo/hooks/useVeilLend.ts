@@ -328,19 +328,17 @@ export function useVeilLend() {
         if (amount === 0n) throw new Error("Enter an amount");
         await ensureFreshPrices();
         const prices = await oraclePrices();
-        // Pre-flight the exact rules the deployed risk_transition circuit
+        // Pre-flight the post-action solvency rule the deployed circuit
         // enforces, so an unprovable action fails with a precise message
-        // before any proving or wallet interaction:
-        //   (a) the circuit's action gate requires amount <= hidden
-        //       collateral (risk_transition line 163 fires for borrows —
-        //       its (1 - isWithdraw) factor inverts the intended gate);
-        //   (b) post-action solvency at current oracle prices.
-        if (kind === "borrow" && amount > st.collateral) {
-          throw new Error(`Borrow amount exceeds this position's hidden collateral (cap ${(Number(st.collateral) / 1e18).toFixed(2)} vCOL in raw units). The deployed circuit requires borrow ≤ hidden collateral — deposit more collateral or borrow a smaller amount.`);
-        }
+        // before any proving or wallet interaction. (The withdraw-only
+        // amount cap lives in the circuit itself; borrows are governed by
+        // LTV here and by the contract's supported-collateral cap on-chain.)
         const accruedPre = ceilDiv(st.debt * currentIndex, st.interestIndex);
         const newDebtPre = kind === "borrow" ? accruedPre + amount : accruedPre;
         const newColPre = kind === "withdraw" ? st.collateral - amount : st.collateral;
+        if (kind === "withdraw" && amount > st.collateral) {
+          throw new Error("Withdraw amount exceeds this position's hidden collateral");
+        }
         if (newColPre * prices.collateralPrice * 10000n < newDebtPre * prices.debtPrice * 7500n) {
           throw new Error("This action would leave the position undercollateralized at current oracle prices (max LTV 75%) — reduce the amount");
         }

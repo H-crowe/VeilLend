@@ -158,8 +158,9 @@ export default function Page() {
                 <div className="hint">Outstanding borrow (public): {fmtTokens(oc.outstanding)} vDBT</div>
               </div>
               <div className="footnote" style={{ marginTop: 6 }}>
-                Borrow rule (deployed circuit): a borrow may not exceed this position&apos;s hidden collateral and must
-                keep it solvent at current oracle prices (max LTV 75%).
+                Borrow rule: the position must stay solvent at current oracle prices (max LTV 75%). On-chain,
+                cumulative borrows are additionally capped at 75% of the collateral actually deposited into
+                the position.
               </div>
             </section>
           )}
