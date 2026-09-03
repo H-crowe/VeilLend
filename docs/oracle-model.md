@@ -59,6 +59,10 @@ in the same transaction, so a proof computed against newer prices reverts
 
 ## 5. Production gap (documented, not implemented)
 
+Production direction for the Horizen deployment: integrate the
+**Horizen Stork oracle** behind the same freshness/bounds interface — the
+current `MockPriceOracle` is testnet/demo infrastructure only.
+
 Multi-source aggregation, deviation/heartbeat checks, sequencer/uptime
 feeds, and liquidation-grade price safety are deliberately NOT built in
 this phase. The interface boundary (`IPriceOracle` + freshness) is the

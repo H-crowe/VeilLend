@@ -82,12 +82,27 @@ price via the deployed MockPriceOracle (owner action).
 ## 11. Where the deployed contracts are
 Addresses come from `deployments/horizenTestnet.json` and are mirrored in
 `lib/contracts/addresses.ts` — VeilLend
-`0x9fd6477Dd3b5eDB4e55A7D7F962Af0e8e332a9B9` plus the four Groth16
-verifiers, MockPriceOracle, and the two test tokens. Full evidence:
+`0xeCB439fbE792Bec4E005f1809E6DCF4FB37d4787` plus the four Groth16
+verifiers (the `risk_transition` circuit gate was corrected, so the
+RiskTransitionVerifier and VeilLend were redeployed —
+RiskTransitionVerifier `0x65dcBf151d10E63a43b972c41C760E983154Cefb`; the
+other three verifiers, the test tokens and the mock oracle are reused),
+MockPriceOracle, and the two test tokens. Full evidence:
 `../docs/testnet-proof-evidence.md` and
 `../docs/testnet-liquidation-evidence.md`.
 
-## 12. Important testnet limitations
+## 12. Recovery prototype (frozen milestone)
+`/recovery-test` demonstrates encrypted private-state backup/recovery: the
+state is encrypted with a random AES-256-GCM data key wrapped by a key
+derived from a deterministic domain-separated wallet signature (EIP-191 +
+HKDF-SHA256), stored OUTSIDE localStorage (downloaded ciphertext file), and
+recovery re-derives the key, decrypts, recomputes the Poseidon commitment
+and matches it against the on-chain active commitment before restoring
+anything. `/sigtest` is the diagnostic page that gated the deterministic
+signature assumption. Recovery grants no on-chain permissions. Details:
+`lib/recovery/README.md`.
+
+## 13. Important testnet limitations
 - **Private state is stored in this browser** (localStorage). Losing it
   means losing access to the position — use *Export* from the console
   (`exportPositions(address)`) to back it up. This is a demo keystore, not

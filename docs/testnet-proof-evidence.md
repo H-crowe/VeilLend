@@ -7,6 +7,15 @@
 
 ---
 
+> **Deployment note (post-M1):** the `risk_transition` circuit's action gate
+> was corrected (the borrow/withdraw amount cap must apply to withdrawals
+> only), which changes its verification key. A new `RiskTransitionVerifier`
+> and a new `VeilLend` were deployed on the same Horizen Testnet — current
+> addresses live in [`deployments/horizenTestnet.json`](../deployments/horizenTestnet.json)
+> (VeilLend `0xeCB439fbE792Bec4E005f1809E6DCF4FB37d4787`). The addresses and
+> transactions below are the **recorded historical evidence** against the
+> superseded deployment and are kept unchanged.
+
 ## 1. Summary of the demonstrated result
 
 On Horizen Testnet (chain ID **2651420**), against the deployed VeilLend
