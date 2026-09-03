@@ -258,6 +258,11 @@ function TxStatus({ tx }: { tx: TxState }) {
         {tx.status === "failed" && <span className="step err">Failed</span>}
       </div>
       {tx.status === "failed" && tx.error && <p className="err" style={{ fontSize: 13 }}>{tx.error}</p>}
+      {tx.status === "confirmed" && tx.softWarning && (
+        <p className="warn-text" style={{ fontSize: 13 }}>
+          {tx.softWarning} The transaction itself succeeded and was not re-sent.
+        </p>
+      )}
       {tx.txHash && (
         <div className="proof-box">
           {tx.block !== undefined && <div className="row"><span className="k">block</span><span>{tx.block}</span></div>}

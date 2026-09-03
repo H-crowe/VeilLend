@@ -33,6 +33,9 @@ export interface TxState {
   explorerUrl?: string;
   error?: string;
   proofVerified?: boolean;
+  /** Set when the transaction itself succeeded but a post-confirmation UI
+   *  state refresh failed. The transaction result is never downgraded. */
+  softWarning?: string;
 }
 
 export interface OnChainPosition {
@@ -90,18 +93,26 @@ export function useVeilLend() {
 
   const readOnChainPosition = useCallback(async (positionId: bigint): Promise<OnChainPosition | null> => {
     if (!publicClient) return null;
+    // viem's readContract returns a positional ARRAY for multi-output ABIs
+    // (positions returns a 6-tuple), so decode by position with a named-field
+    // fallback. Reading named properties on the array is what previously
+    // produced `BigInt(undefined)`.
     const raw = await publicClient.readContract({
       address: ADDRESSES.veilLend as Address, abi: veilLendAbi, functionName: "positions", args: [positionId],
-    }) as { collateralAsset: string; debtAsset: string; activeCommitment: string; interestIndex: bigint; sequence: number; status: number };
+    }) as unknown;
+    const f: unknown[] = Array.isArray(raw)
+      ? raw
+      : Object.values((raw ?? {}) as Record<string, unknown>);
+    const [collateralAsset, debtAsset, activeCommitment, interestIndex, sequence, status] = f as [string, string, string, bigint, bigint | number, bigint | number];
     const [supported, outstanding] = await Promise.all([
       publicClient.readContract({ address: ADDRESSES.veilLend as Address, abi: veilLendAbi, functionName: "supportedCollateral", args: [positionId] }) as Promise<bigint>,
       publicClient.readContract({ address: ADDRESSES.veilLend as Address, abi: veilLendAbi, functionName: "borrowOutstanding", args: [positionId] }) as Promise<bigint>,
     ]);
-    if (Number(raw.status) === 0) return null;
+    if (Number(status) === 0) return null;
     return {
-      collateralAsset: raw.collateralAsset, debtAsset: raw.debtAsset,
-      activeCommitment: raw.activeCommitment, interestIndex: raw.interestIndex,
-      sequence: BigInt(raw.sequence), status: Number(raw.status),
+      collateralAsset, debtAsset,
+      activeCommitment, interestIndex: BigInt(interestIndex),
+      sequence: BigInt(sequence), status: Number(status),
       supported: BigInt(supported), outstanding: BigInt(outstanding),
     };
   }, [publicClient]);
@@ -110,6 +121,22 @@ export function useVeilLend() {
     if (!address || !selectedId) { setOnChain(null); return; }
     try { setOnChain(await readOnChainPosition(BigInt(selectedId))); } catch { setOnChain(null); }
   }, [address, selectedId, readOnChainPosition]);
+
+  /**
+   * Post-confirmation state refresh. Runs only after the transaction has
+   * already been marked `confirmed`; any failure here is surfaced as a soft
+   * warning and must never flip the result back to `failed`.
+   */
+  const refreshAfterSuccess = useCallback(async () => {
+    try {
+      await refreshOnChain();
+      refreshPositions();
+    } catch {
+      setTx((t) => t.status === "confirmed"
+        ? { ...t, softWarning: "Transaction confirmed on-chain. A background UI refresh failed — this does not affect the transaction or your saved state." }
+        : t);
+    }
+  }, [refreshOnChain, refreshPositions]);
 
   useEffect(() => { void refreshOnChain(); }, [address, selectedId, tx.status, refreshOnChain]);
 
@@ -154,7 +181,15 @@ export function useVeilLend() {
     else if (/InvalidProof|Assert Failed|witness/i.test(raw)) msg = "Proof generation or verification failed";
     else if (/TransitionConsumed/i.test(raw)) msg = "Replay detected — this proof was already used";
     else if (/UnsupportedAction/i.test(raw)) msg = "This action is not available yet";
-    setTx({ status: "failed", error: msg, label: raw.slice(0, 140) });
+    // A transaction that already reached `confirmed` must never be displayed
+    // as failed — a late post-confirmation error is a UI refresh problem,
+    // not an on-chain failure.
+    setTx((t) => {
+      if (t.status === "confirmed") {
+        return { ...t, softWarning: "Transaction confirmed on-chain. A background UI refresh failed — this does not affect the transaction or your saved state." };
+      }
+      return { status: "failed", error: msg, label: raw.slice(0, 140) };
+    });
     throw err;
   }, []);
 
@@ -207,11 +242,24 @@ export function useVeilLend() {
         });
         setTx((t) => ({ ...t, status: "confirming", txHash: hash }));
         const rec = await publicClient.waitForTransactionReceipt({ hash });
-        const on = await readOnChainPosition(positionId);
-        if (!on || on.activeCommitment !== bytes32(c0)) throw new Error("created position state mismatch");
+        // Persist the private state BEFORE any post-confirmation read: the
+        // control secret exists only here until saved, and losing it would
+        // permanently orphan the on-chain position.
         savePosition(address, { positionId: positionId.toString(), state: serializeState(st), createdAt: new Date().toISOString() });
         refreshPositions();
         setSelectedId(positionId.toString());
+        // Verification of the created position is best-effort: a failure here
+        // is a UI refresh problem, never a transaction failure.
+        try {
+          const on = await readOnChainPosition(positionId);
+          if (!on || on.activeCommitment !== bytes32(c0)) {
+            setTx({ status: "confirmed", txHash: hash, block: Number(rec.blockNumber), gasUsed: rec.gasUsed.toString(), explorerUrl: explorerTx(hash), proofVerified: false, softWarning: "Position created and private state saved. Could not verify the on-chain position state — reload to refresh." });
+            return;
+          }
+        } catch {
+          setTx({ status: "confirmed", txHash: hash, block: Number(rec.blockNumber), gasUsed: rec.gasUsed.toString(), explorerUrl: explorerTx(hash), proofVerified: false, softWarning: "Position created and private state saved. Could not read the on-chain position state — reload to refresh." });
+          return;
+        }
         setTx({ status: "confirmed", txHash: hash, block: Number(rec.blockNumber), gasUsed: rec.gasUsed.toString(), explorerUrl: explorerTx(hash), proofVerified: false });
         return;
       }
@@ -234,7 +282,7 @@ export function useVeilLend() {
         const stored = getPosition(address, positionId);
         if (stored) savePosition(address, { ...stored, state: serializeState(t.newState) });
         setTx({ status: "confirmed", txHash: res.hash, block: res.block, gasUsed: res.gasUsed, explorerUrl: explorerTx(res.hash), proofVerified: true });
-        await refreshOnChain(); refreshPositions();
+        await refreshAfterSuccess();
         return;
       }
 
@@ -253,7 +301,7 @@ export function useVeilLend() {
         const stored = getPosition(address, positionId);
         if (stored) savePosition(address, { ...stored, state: serializeState(t.newState) });
         setTx({ status: "confirmed", txHash: res.hash, block: res.block, gasUsed: res.gasUsed, explorerUrl: explorerTx(res.hash), proofVerified: true });
-        await refreshOnChain(); refreshPositions();
+        await refreshAfterSuccess();
         return;
       }
 
@@ -267,14 +315,14 @@ export function useVeilLend() {
         const stored = getPosition(address, positionId);
         if (stored) savePosition(address, { ...stored, state: serializeState({ ...st, collateral: 0n }) });
         setTx({ status: "confirmed", txHash: res.hash, block: res.block, gasUsed: res.gasUsed, explorerUrl: explorerTx(res.hash), proofVerified: true });
-        await refreshOnChain(); refreshPositions();
+        await refreshAfterSuccess();
         return;
       }
       throw new Error("unknown action");
     } catch (err) {
       fail(err);
     }
-  }, [getWallet, address, publicClient, selectedId, selectedState, proveAndSubmit, fail, oraclePrices, readOnChainPosition, refreshOnChain, refreshPositions]);
+  }, [getWallet, address, publicClient, selectedId, selectedState, proveAndSubmit, fail, oraclePrices, readOnChainPosition, refreshOnChain, refreshPositions, refreshAfterSuccess]);
 
   const mintTestTokens = useCallback(async (kind: "vCOL" | "vDBT", amount: bigint) => {
     if (!isConnected || !address) throw new Error("wallet not connected");
