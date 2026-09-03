@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAccount, useConnect, usePublicClient, useSwitchChain, useWalletClient } from "wagmi";
 import { getWalletClient as getWagmiWalletClient } from "@wagmi/core";
 import type { Address } from "viem";
@@ -14,7 +14,8 @@ import {
   type PrivateState, type LiquidationParams,
 } from "../lib/zk/witness";
 import type { CircuitName } from "../lib/zk/snarkjs";
-import { deserializeState, serializeState, listPositions, savePosition, getPosition, type StoredPosition } from "../lib/state/store";
+import { assertReceiptSuccess } from "../lib/tx/receipt";
+import { deserializeState, serializeState, listPositions, savePosition, getPosition, saveLastSelected, getLastSelected, type StoredPosition } from "../lib/state/store";
 import { wagmiConfig } from "../app/providers";
 
 const WAD = 10n ** 18n;
@@ -85,11 +86,41 @@ export function useVeilLend() {
 
   useEffect(() => { refreshPositions(); }, [address, refreshPositions]);
 
+  /**
+   * Persisted selection: which position the user last had open. Survives
+   * browser refreshes (the raw selection is otherwise transient React state
+   * and the UI would render as a fresh session). `null` clears the entry.
+   */
+  const selectPosition = useCallback((id: string | null) => {
+    setSelectedId(id);
+    if (address) saveLastSelected(address, id);
+  }, [address]);
+
+  // Restore the saved selection once per wallet, only when that position
+  // still exists in the freshly loaded list; never overrides an existing
+  // selection and never auto-picks a position that was not selected before.
+  const restoredSelectionFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!address) { restoredSelectionFor.current = null; return; }
+    if (restoredSelectionFor.current === address) return;
+    if (positions.length === 0) return; // not loaded yet (or no positions)
+    restoredSelectionFor.current = address;
+    if (selectedId !== null) return;
+    const saved = getLastSelected(address);
+    if (saved && positions.some((p) => p.positionId === saved)) setSelectedId(saved);
+  }, [address, positions, selectedId]);
+
+  // Bumped after every SUCCESSFUL transition save so the selectedState memo
+  // re-reads localStorage in the same session (selectedId does not change on
+  // deposit/repay/borrow/withdraw, so the memo would otherwise keep serving
+  // the pre-transition state for the rest of the session).
+  const [stateVersion, setStateVersion] = useState(0);
+
   const selectedState: PrivateState | null = useMemo(() => {
     if (!address || !selectedId) return null;
     const stored = getPosition(address, BigInt(selectedId));
     return stored ? deserializeState(stored.state) : null;
-  }, [address, selectedId]);
+  }, [address, selectedId, stateVersion]);
 
   const readOnChainPosition = useCallback(async (positionId: bigint): Promise<OnChainPosition | null> => {
     if (!publicClient) return null;
@@ -255,6 +286,11 @@ export function useVeilLend() {
     });
     setTx((t) => ({ ...t, status: "confirming", txHash: hash }));
     const rec = await publicClient!.waitForTransactionReceipt({ hash });
+    // viem resolves with the receipt even for MINED-AND-REVERTED transactions.
+    // Fail closed here: the callers below persist the new private state only
+    // after this guard passes, so a reverted transaction can never advance
+    // the local witness state past the on-chain commitment chain.
+    assertReceiptSuccess(rec.status, hash);
     return { hash, block: Number(rec.blockNumber), gasUsed: rec.gasUsed.toString() };
   }, [publicClient]);
 
@@ -283,7 +319,7 @@ export function useVeilLend() {
         // permanently orphan the on-chain position.
         savePosition(address, { positionId: positionId.toString(), state: serializeState(st), createdAt: new Date().toISOString() });
         refreshPositions();
-        setSelectedId(positionId.toString());
+        selectPosition(positionId.toString());
         // Verification of the created position is best-effort: a failure here
         // is a UI refresh problem, never a transaction failure.
         try {
@@ -317,6 +353,7 @@ export function useVeilLend() {
         const res = await proveAndSubmit(fnFor(kind), "state_transition", t.publicSignals, t.inputs, walletClient);
         const stored = getPosition(address, positionId);
         if (stored) savePosition(address, { ...stored, state: serializeState(t.newState) });
+        setStateVersion((v) => v + 1); // in-memory selectedState now reflects the new state
         setTx({ status: "confirmed", txHash: res.hash, block: res.block, gasUsed: res.gasUsed, explorerUrl: explorerTx(res.hash), proofVerified: true });
         await refreshAfterSuccess();
         return;
@@ -351,6 +388,7 @@ export function useVeilLend() {
         const res = await proveAndSubmit(fnFor(kind), "risk_transition", t.publicSignals, t.inputs, walletClient);
         const stored = getPosition(address, positionId);
         if (stored) savePosition(address, { ...stored, state: serializeState(t.newState) });
+        setStateVersion((v) => v + 1); // in-memory selectedState now reflects the new state
         setTx({ status: "confirmed", txHash: res.hash, block: res.block, gasUsed: res.gasUsed, explorerUrl: explorerTx(res.hash), proofVerified: true });
         await refreshAfterSuccess();
         return;
@@ -366,6 +404,7 @@ export function useVeilLend() {
         const res = await proveAndSubmit("liquidate", "liquidation", w.publicSignals, w.inputs, walletClient, { collateralOut: w.amounts.collateralOut, debtOut: w.amounts.debtOut });
         const stored = getPosition(address, positionId);
         if (stored) savePosition(address, { ...stored, state: serializeState({ ...st, collateral: 0n }) });
+        setStateVersion((v) => v + 1); // in-memory selectedState now reflects the new state
         setTx({ status: "confirmed", txHash: res.hash, block: res.block, gasUsed: res.gasUsed, explorerUrl: explorerTx(res.hash), proofVerified: true });
         await refreshAfterSuccess();
         return;
@@ -374,7 +413,7 @@ export function useVeilLend() {
     } catch (err) {
       fail(err);
     }
-  }, [getWallet, address, publicClient, selectedId, selectedState, proveAndSubmit, fail, oraclePrices, ensureFreshPrices, readOnChainPosition, refreshOnChain, refreshPositions, refreshAfterSuccess]);
+  }, [getWallet, address, publicClient, selectedId, selectedState, proveAndSubmit, fail, oraclePrices, ensureFreshPrices, readOnChainPosition, refreshOnChain, refreshPositions, refreshAfterSuccess, selectPosition]);
 
   const mintTestTokens = useCallback(async (kind: "vCOL" | "vDBT", amount: bigint) => {
     if (!isConnected || !address) throw new Error("wallet not connected");
@@ -427,7 +466,7 @@ export function useVeilLend() {
     getWallet,
     connectorName: connectors[0]?.name ?? "Injected",
     switchChain: () => switchChain({ chainId: horizenTestnet.id }),
-    snarkReady, positions, selectedId, setSelectedId, selectedState,
+    snarkReady, positions, selectedId, setSelectedId: selectPosition, selectedState,
     onChain, refreshOnChain, oraclePrices,
     runAction, mintTestTokens, seedLiquidity, refreshOraclePrices, isEligible,
     tx, setTx, RISK_PARAMS,

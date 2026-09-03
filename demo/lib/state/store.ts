@@ -13,6 +13,7 @@
 import type { PrivateState } from "../zk/witness";
 
 const KEY_PREFIX = "veillend:positions:";
+const LAST_SELECTED_PREFIX = "veillend:lastSelected:";
 
 export interface StoredPosition {
   positionId: string;
@@ -51,6 +52,23 @@ export function savePosition(address: string, position: StoredPosition) {
 
 export function getPosition(address: string, positionId: bigint): StoredPosition | undefined {
   return listPositions(address).find((p) => p.positionId === positionId.toString());
+}
+
+/**
+ * Remembers which position the user last had open, per wallet — UI
+ * convenience only, so a browser refresh restores the same selection.
+ * `null` clears the entry.
+ */
+export function saveLastSelected(address: string, positionId: string | null): void {
+  if (typeof window === "undefined") return;
+  const key = LAST_SELECTED_PREFIX + address.toLowerCase();
+  if (positionId === null) window.localStorage.removeItem(key);
+  else window.localStorage.setItem(key, positionId);
+}
+
+export function getLastSelected(address: string): string | null {
+  if (typeof window === "undefined") return null;
+  return window.localStorage.getItem(LAST_SELECTED_PREFIX + address.toLowerCase());
 }
 
 /** Serializes a private state for storage (string-encoded field elements). */
