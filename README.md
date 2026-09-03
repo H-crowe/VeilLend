@@ -63,6 +63,16 @@ against the deployed VeilLend contracts on Horizen Testnet (chain ID
 Addresses, transaction hashes, the commitment chain, and exact reproduction
 steps: **[docs/M1-evidence.md](docs/M1-evidence.md)**.
 
+## Live Demo
+
+A browser demo for the deployed Horizen Testnet contracts is in [`demo/`](demo/) —
+wallet connection, real in-browser Groth16 proving (snarkjs), and the full
+deposit / borrow / repay / withdraw / liquidate lifecycle against the
+deployed protocol. Run with `cd demo && npm install && npm run dev`.
+Evidence: [docs/M1-evidence.md](docs/M1-evidence.md),
+[docs/testnet-proof-evidence.md](docs/testnet-proof-evidence.md),
+[docs/testnet-liquidation-evidence.md](docs/testnet-liquidation-evidence.md).
+
 ## Architecture & documentation
 
 | Document | Contents |
