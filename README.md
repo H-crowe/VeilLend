@@ -84,9 +84,11 @@ A liquidator can prove that a position is undercollateralized without learning t
 
 ### Non-Custodial Architecture
 
-The protocol does not provide an administrative withdrawal backdoor or upgrade key.
+The current deployment does not provide an administrative withdrawal backdoor or upgrade key.
 
 Private positions are controlled by their cryptographic control secret, which is bound into the commitment and nullifier construction.
+
+The current deployment is a testnet prototype and is not intended to represent a final production governance or upgrade architecture.
 
 ---
 
@@ -94,26 +96,36 @@ Private positions are controlled by their cryptographic control secret, which is
 
 ```text
 Private Position State
+
 (collateral, debt, index snapshot, control secret, salt)
+
                     │
                     ▼
+
         Poseidon Commitment
        (BN254 / versioned)
+
                     │
                     ▼
+
           Groth16 ZK Proof
        generated in the browser
+
                     │
-                    │
+
        "I know the private state,
         control the position,
         and this transition satisfies
         the protocol rules."
+
                     │
                     ▼
+
        On-chain Solidity verification
+
                     │
                     ▼
+
         New commitment / sequence
         + nullifier consumption
 ```
@@ -296,10 +308,15 @@ Each asset has a `RateConfig` containing:
 
 ```text
 baseRateBps
+
 slopeBps
+
 targetUtilizationBps
+
 reserveFactorBps
+
 maxLtvBps
+
 liquidationThresholdBps
 ```
 
@@ -380,13 +397,21 @@ That fits VeilLend's architecture:
 
 ```text
 Private state
+
      ↓
+
 Client-side ZK proving
+
      ↓
+
 Poseidon commitment
+
      ↓
+
 Horizen EVM
+
      ↓
+
 On-chain proof verification
 ```
 
@@ -404,23 +429,46 @@ VeilLend is also aligned with the Horizen S2 direction around **private borrow-l
 
 ---
 
+## Base & Ecosystem Liquidity
+
+VeilLend is deployed on Horizen and is designed to access liquidity originating from the broader Base ecosystem through existing ecosystem infrastructure.
+
+Horizen's position as an EVM-native L3 built on Base provides a path for assets and liquidity originating on Base to enter Horizen markets.
+
+VeilLend will **not build a separate bridge**.
+
+Instead, future production deployment will use existing Base ↔ Horizen bridging and ecosystem infrastructure to make supported Base-originating assets available to VeilLend lending markets on Horizen.
+
+This integration is an ecosystem and liquidity expansion path rather than a dependency for the core confidential lending architecture.
+
+Planned integrations include:
+
+* Base-originating liquidity entering supported VeilLend markets;
+* supported collateral and debt assets available through Horizen ecosystem infrastructure;
+* integrations with relevant Horizen DeFi applications;
+* composable lending flows with privacy-focused ecosystem applications;
+* additional liquidity integrations as the Horizen ecosystem develops.
+
+---
+
 ## Horizen Testnet Deployment
 
 **Network:** Horizen Testnet
+
 **Chain ID:** `2651420`
 
 ### Current Deployment
 
-| Contract                                | Address                                      |
-| --------------------------------------- | -------------------------------------------- |
-| **VeilLend**                            | `0xeCB439fbE792Bec4E005f1809E6DCF4FB37d4787` |
-| **RiskTransitionVerifier**              | `0x65dcBf151d10E63a43b972c41C760E983154Cefb` |
-| **Groth16Verifier — State Transitions** | `0x0D96E5a05d11c0839037488332CAd29E6Ef6686C` |
-| **SolvencyVerifier**                    | `0xD33ce96e9A6AF2c8f5E7f73d5214eDf0c9eff24F` |
-| **LiquidationVerifier**                 | `0x4bf85D6D5f3A730280D707dB0D2d063940A80869` |
-| **MockPriceOracle**                     | `0xDA4CAA96D6fF78Af30A3955b5310BE9258d57Bc2` |
-| **vCOL**                                | `0x281FbbeD6f2DEA61c86191EA92f2B9B9D2D66a3c` |
-| **vDBT**                                | `0xe27c05934Ad4046d72766808b30F0514e978f612` |
+| Contract                                | Address                                       |
+| --------------------------------------- | --------------------------------------------- |
+| **VeilLend**                            | `0xeCB439fbE792Bec4E005f1809E6DCF4FB37d4787`  |
+| **RiskTransitionVerifier**              | `0x65dcBf151d10E63a43b972c41C760E983154Cefb`  |
+| **Groth16Verifier — State Transitions** | `0x0D96E5a05d11c0839037488332CAd29E6Ef6686C`  |
+| **SolvencyVerifier**                    | `0xD33ce96e9A6AF2c8f5E7f73d5214eDf0c9eff24F`  |
+| **LiquidationVerifier**                 | `0x4bf85D6D5f3A730280D707dB0D2d063940A80869`  |
+| **MockPriceOracle**                     | `0xDA4CAA96D6fF78Af30A3955b5310BE9258d57Bc2`  |
+| **vCOL**                                | `0x281FbbeD6f2DEA61c86191EA92f2B9B9D2D66a3c`  |
+| **vDBT**                                | `0xe27c05934Ad4046d72766808b30F0514e978f612`  |
 
 **RPC:** `https://horizen-testnet.rpc.caldera.xyz/http`
 
@@ -432,7 +480,7 @@ The current VeilLend deployment uses the repaired `RiskTransitionVerifier` follo
 
 The complete machine-readable deployment record is available in:
 
-[`deployments/horizenTestnet.json`](deployments/horizenTestnet.json)
+`deployments/horizenTestnet.json`
 
 The file also preserves the superseded first deployment for historical evidence.
 
@@ -477,13 +525,21 @@ Real Groth16 proofs have been exercised against the Horizen testnet deployment f
 
 ```text
 Create Position
+
       ↓
+
 Deposit
+
       ↓
+
 Borrow
+
       ↓
+
 Repay
+
       ↓
+
 Withdraw
 ```
 
@@ -493,13 +549,21 @@ The liquidation path has also been exercised:
 
 ```text
 Undercollateralize position
+
       ↓
+
 Generate liquidation proof
+
       ↓
+
 On-chain verification
+
       ↓
+
 In-circuit settlement
+
       ↓
+
 Position closed
 ```
 
@@ -507,26 +571,34 @@ The recovery prototype has additionally demonstrated:
 
 ```text
 Encrypted backup
+
       ↓
+
 Clear local state
+
       ↓
+
 Recover private state
+
       ↓
+
 Recompute Poseidon commitment
+
       ↓
+
 Match on-chain commitment
 ```
 
 Historical testnet evidence is preserved in:
 
-* [`docs/testnet-proof-evidence.md`](docs/testnet-proof-evidence.md)
-* [`docs/testnet-liquidation-evidence.md`](docs/testnet-liquidation-evidence.md)
+* `docs/testnet-proof-evidence.md`
+* `docs/testnet-liquidation-evidence.md`
 
 ---
 
 ## Browser Demo
 
-The [`demo/`](demo/) directory contains a working Next.js frontend using:
+The `demo/` directory contains a working Next.js frontend using:
 
 * React / TypeScript;
 * wagmi;
@@ -540,21 +612,37 @@ The core demo flow is:
 
 ```text
 Connect wallet
-    ↓
+
+      ↓
+
 Create position
-    ↓
+
+      ↓
+
 Mint test tokens
-    ↓
+
+      ↓
+
 Deposit collateral
-    ↓
+
+      ↓
+
 Refresh oracle when required
-    ↓
+
+      ↓
+
 Generate browser-side ZK proof
-    ↓
+
+      ↓
+
 Borrow
-    ↓
+
+      ↓
+
 Repay
-    ↓
+
+      ↓
+
 Withdraw
 ```
 
@@ -564,7 +652,7 @@ The demo also includes:
 * encrypted private-state recovery prototype;
 * signature determinism test.
 
-See [`demo/README.md`](demo/README.md) for the detailed walkthrough.
+See `demo/README.md` for the detailed walkthrough.
 
 ### Test Assets
 
@@ -580,32 +668,35 @@ Both are **test/demo assets only** and are not production assets.
 
 ```text
 circuits/
-├── veillend_lib.circom          # shared commitment/nullifier/arithmetic logic
-├── state_transition.circom      # deposit / repay
-├── solvency.circom              # private solvency proof
-├── risk_transition.circom       # borrow / withdraw + post-action solvency
-└── liquidation.circom           # private liquidation eligibility + settlement
+
+├── veillend_lib.circom       # shared commitment/nullifier/arithmetic logic
+├── state_transition.circom   # deposit / repay
+├── solvency.circom            # private solvency proof
+├── risk_transition.circom     # borrow / withdraw + post-action solvency
+└── liquidation.circom         # private liquidation eligibility + settlement
 
 contracts/
-├── VeilLend.sol                 # protocol
-└── zk/                          # generated Solidity verifiers
+
+├── VeilLend.sol               # protocol
+└── zk/                        # generated Solidity verifiers
 
 scripts/
-├── prove.ts                     # proving utilities / local E2E
-├── deploy.ts                    # full testnet deployment
-├── deploy-riskfix.ts            # repaired deployment
-├── e2e-riskfix.ts               # lifecycle E2E
-└── proof-test.ts                # on-chain ZK integration test
 
-test/                             # unit, ZK, adversarial, fuzz and invariant tests
+├── prove.ts                   # proving utilities / local E2E
+├── deploy.ts                  # full testnet deployment
+├── deploy-riskfix.ts          # repaired deployment
+├── e2e-riskfix.ts             # lifecycle E2E
+└── proof-test.ts              # on-chain ZK integration test
 
-demo/                             # Next.js browser application
+test/                           # unit, ZK, adversarial, fuzz and invariant tests
 
-deployments/                      # deployment records and E2E logs
+demo/                           # Next.js browser application
 
-docs/                             # architecture, privacy, security and evidence
+deployments/                    # deployment records and E2E logs
 
-architecture.md                   # design reference
+docs/                           # architecture, privacy, security and evidence
+
+architecture.md                 # design reference
 ```
 
 ---
@@ -633,7 +724,7 @@ or available on `PATH`.
 npm install
 ```
 
-### Build the ZK stack
+### Build the ZK Stack
 
 ```bash
 npm run zk:build
@@ -641,25 +732,25 @@ npm run zk:build
 
 This compiles the circuits, generates the proving artifacts, and regenerates the Solidity verifiers.
 
-### Compile contracts
+### Compile Contracts
 
 ```bash
 npm run build
 ```
 
-### Run tests
+### Run Tests
 
 ```bash
 npm test
 ```
 
-### Run local proof demonstration
+### Run Local Proof Demonstration
 
 ```bash
 npm run prove
 ```
 
-### Run the browser demo
+### Run the Browser Demo
 
 ```bash
 cd demo
@@ -673,7 +764,7 @@ Then open:
 http://localhost:3000
 ```
 
-### Testnet operations
+### Testnet Operations
 
 For on-chain commands, configure:
 
@@ -717,8 +808,8 @@ See `.env.example` for the expected configuration.
 * broader collateral support;
 * utilization-based interest-rate economics;
 * production incentives and reserve mechanics;
-* ecosystem liquidity integrations;
-* deeper Horizen ecosystem integration;
+* Base-originating liquidity access through existing Base ↔ Horizen infrastructure;
+* deeper Horizen ecosystem integrations;
 * mainnet deployment;
 * production monitoring and operational hardening;
 * real user and liquidity growth.
@@ -748,13 +839,15 @@ The protocol has not undergone an external security audit.
 
 A production deployment requires additional security review and audit work.
 
-### Immutable Deployment
+### Immutable Testnet Deployment
 
-Verifier addresses are fixed during deployment.
+The current testnet deployment uses immutable verifier addresses and a non-upgradeable protocol deployment.
 
-Future circuit changes require a new deployment.
+This is intentional for the current M1 prototype and provides a fixed, verifiable deployment for testnet evidence.
 
-This architecture was already exercised when the repaired risk-transition circuit required a new verifier and VeilLend deployment.
+Future production architecture will be designed separately, including the upgrade, governance, emergency, and recovery mechanisms required for production operation.
+
+Circuit or verifier changes to the current deployment require a new deployment.
 
 ### Testnet Oracle
 
@@ -834,28 +927,49 @@ Internal security reviews identified and addressed several classes of issues, in
 
 The relevant fixes are covered by adversarial regression tests including:
 
-* [`test/supported-collateral.test.ts`](test/supported-collateral.test.ts)
-* [`test/recipient-binding.test.ts`](test/recipient-binding.test.ts)
-* [`test/risk-gate.test.ts`](test/risk-gate.test.ts)
+* `test/supported-collateral.test.ts`
+* `test/recipient-binding.test.ts`
+* `test/risk-gate.test.ts`
 
-Additional security analysis is documented in [`docs/phase3.md`](docs/phase3.md).
+Additional security analysis is documented in `docs/phase3.md`.
 
 ---
 
+## Roadmap & Milestones
+
+| Milestone | Objective                       | Primary Outcome                                                                                      | Status                       |
+| --------- | ------------------------------- | ---------------------------------------------------------------------------------------------------- | ---------------------------- |
+| **M1**    | Prove the hard part             | Demonstrate confidential lending state and ZK-enforced lending/liquidation on Horizen Testnet        | **Technically demonstrated** |
+| **M2**    | Security & production hardening | Complete external security review and prepare the protocol for production                            | **Planned**                  |
+| **M3**    | Mainnet & real usage            | Deploy to Horizen Mainnet, connect to ecosystem liquidity, and demonstrate real lending-market usage | **Planned**                  |
+
+See:
+
+* `docs/roadmap.md`
+* `docs/milestones.md`
+
+for the detailed milestone plan and acceptance criteria.
+
+---
 
 ## Contact
 
-- Telegram: https://t.me/cr0wel
+* Telegram: https://t.me/cr0wel
+
+---
 
 ## Project Status
 
 Working testnet prototype for Horizen S2: private position commitments, Groth16 ZK proofs, private solvency, confidential liquidation, replay protection, recipient binding, public accounting safeguards, browser-side proof generation, encrypted private-state recovery prototype, and a working Horizen testnet frontend.
 
-The current release is a testnet prototype and has not undergone a production security audit. Production milestones include Stork oracle integration, broader collateral support, utilization-based interest economics, ecosystem liquidity, mainnet deployment, and additional security hardening.
+The current release is a **testnet prototype** and has not undergone a production security audit.
+
+Production milestones include Stork oracle integration, broader collateral support, utilization-based interest economics, Base-originating ecosystem liquidity, deeper Horizen ecosystem integration, mainnet deployment, and additional security hardening.
+
+---
 
 ## License
 
 VeilLend's original protocol and application code is released under the MIT License.
 
-The snarkjs-generated Solidity verifiers under `contracts/zk/` retain their
-GPL-3.0 licensing as indicated by their SPDX headers.
+The snarkjs-generated Solidity verifiers under `contracts/zk/` retain their GPL-3.0 licensing as indicated by their SPDX headers.

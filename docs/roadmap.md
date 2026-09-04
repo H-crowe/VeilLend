@@ -6,9 +6,9 @@ This roadmap describes the progression from the current technical prototype to a
 
 ---
 
-## 1. Current State — Built & Testnet-Validated
+# 1. Current State — Built & Testnet-Validated
 
-VeilLend has already demonstrated the core privacy mechanism required by the protocol.
+VeilLend has demonstrated the core confidential lending mechanism required by the protocol.
 
 ### Implemented
 
@@ -59,7 +59,7 @@ The central M1 objective is:
 
 #### Privacy Architecture
 
-* Finalize the production privacy model
+* Finalize the privacy model
 * Define exactly which state remains private
 * Define which information must remain public for settlement and accounting
 * Document privacy leakage and known limitations
@@ -67,7 +67,7 @@ The central M1 objective is:
 
 #### ZK Infrastructure
 
-* Harden the state-transition circuits
+* Harden state-transition circuits
 * Harden risk-transition circuits
 * Harden solvency constraints
 * Harden liquidation circuits
@@ -124,7 +124,7 @@ M1 is considered complete when:
 * Liquidation eligibility can be proven without revealing the complete private position.
 * A liquidation can execute successfully on Horizen Testnet.
 * Replay and recipient-binding protections are demonstrated.
-* Public custody/accounting remains consistent with the protocol's hidden state model.
+* Public custody/accounting remains consistent with the hidden state model.
 * The complete flow is reproducible from the repository.
 
 **Current position: M1 technical objective demonstrated.**
@@ -147,8 +147,8 @@ Transform the demonstrated privacy protocol into a security-reviewed implementat
 * Review custody invariants
 * Review accounting invariants
 * Review oracle integration
-* Review upgradeability / immutability decisions
-* Remove unnecessary trust assumptions
+* Define production upgradeability architecture
+* Minimize unnecessary trust assumptions
 
 ### ZK Security
 
@@ -213,19 +213,19 @@ Finalize and maintain a complete threat model covering:
 * ZK circuits reviewed
 * Threat model finalized
 * Emergency and recovery mechanisms tested
-* Production deployment configuration documented
+* Production deployment architecture documented
 
 **Status: Planned / Not yet complete.**
 
 ---
 
-# 4. M3 — Mainnet & Real Usage
+# 4. M3 — Mainnet, Liquidity & Real Usage
 
 ## Objective
 
-Deploy VeilLend to Horizen Mainnet and demonstrate real protocol usage.
+Deploy VeilLend to Horizen Mainnet and demonstrate real protocol usage while connecting the protocol to the broader Horizen and Base liquidity ecosystem.
 
-Horizen's S2 framework explicitly emphasizes real mainnet usage and in-market metrics such as users, transaction volume, TVL, and utilization.
+Horizen's S2 framework emphasizes real mainnet usage and metrics such as users, transaction volume, TVL, utilization, and privacy-preserving liquidations.
 
 ### Mainnet Preparation
 
@@ -253,6 +253,21 @@ Horizen's S2 framework explicitly emphasizes real mainnet usage and in-market me
 * Enable liquidation
 * Monitor protocol health and accounting
 
+### Horizen & Base Liquidity Integration
+
+VeilLend will connect to liquidity originating from the broader Base ecosystem through **existing Base ↔ Horizen bridging and ecosystem infrastructure**, rather than building a new bridge.
+
+Planned work includes:
+
+* Connect supported Base-originating assets to Horizen liquidity flows
+* Integrate with relevant Horizen ecosystem liquidity
+* Enable capital to move from Base into Horizen-supported lending markets
+* Support composable lending flows
+* Explore integrations with privacy-focused DeFi applications
+* Integrate with relevant ecosystem infrastructure as liquidity and usage mature
+
+The initial implementation will remain focused on Horizen. Base connectivity is an ecosystem and liquidity expansion path rather than a requirement for the core confidential lending mechanism.
+
 ### Real Usage
 
 Measure and report:
@@ -278,6 +293,7 @@ Demonstrate that liquidation works reliably under real market conditions while p
 * Real liquidity supplied
 * Real users interact with the protocol
 * Borrowing and lending occur on mainnet
+* Base-originating liquidity can access supported Horizen markets through existing infrastructure
 * Liquidations function correctly
 * Protocol accounting remains consistent
 * Privacy guarantees remain intact under production operation
@@ -287,34 +303,24 @@ Demonstrate that liquidation works reliably under real market conditions while p
 
 ---
 
-# 5. Ecosystem & Horizen Integration
+# 5. Ecosystem & Asset Expansion
 
-VeilLend is designed as a native component of Horizen's private onchain finance ecosystem rather than an isolated lending application.
+## Collateral Expansion
 
-Horizen's RFP specifically calls for integration with Horizen ecosystem liquidity and Base, support for relevant collateral types, and a strong solution for confidential liquidation.
-
-### Liquidity & Composability
-
-* Integrate with relevant Horizen ecosystem liquidity
-* Connect to Base liquidity where appropriate
-* Support composable lending flows
-* Enable integrations with privacy-focused DeFi applications
-* Explore interoperability with ecosystem infrastructure
-
-### Collateral Expansion
-
-Initially focus on a limited set of well-supported collateral assets.
+VeilLend will initially focus on a limited set of well-supported collateral assets.
 
 After production validation:
 
 * Add additional collateral types
 * Add production oracle feeds
 * Establish asset-specific risk parameters
-* Validate each asset through the protocol's privacy and accounting model
+* Validate each asset through the privacy and accounting model
 
-### ZEN Integration
+Collateral selection will prioritize assets with meaningful ecosystem liquidity, reliable price feeds, and appropriate risk characteristics.
 
-Explore meaningful ZEN integration into VeilLend's economics and ecosystem alignment.
+## ZEN Integration
+
+ZEN will be considered a priority asset for ecosystem alignment and protocol utility.
 
 Potential areas include:
 
@@ -322,11 +328,9 @@ Potential areas include:
 * ZEN-denominated lending markets
 * ZEN-related incentives
 * Protocol revenue alignment
-* Integration with Horizen's staking/economic ecosystem
+* Integration with relevant Horizen ecosystem economics
 
 Any ZEN integration will be designed around actual protocol utility rather than token speculation.
-
-Horizen currently positions ZEN as an important economic alignment layer for ecosystem applications.
 
 ---
 
@@ -352,8 +356,9 @@ After the initial mainnet launch, development will focus on improving capital ef
 * Improve proof-generation UX
 * Explore additional proving infrastructure
 * Evaluate Horizen privacy infrastructure integrations where beneficial
+* Explore selective disclosure mechanisms
 
-Horizen supports application-level privacy implementations alongside infrastructure such as Vela and zkVerify; VeilLend will adopt additional infrastructure only where it provides a concrete technical or economic benefit.
+VeilLend will adopt additional privacy infrastructure only where it provides a concrete technical or economic benefit.
 
 ### User Experience
 
@@ -371,8 +376,6 @@ Horizen supports application-level privacy implementations alongside infrastruct
 
 # 7. Development Progression
 
-The overall development path is:
-
 ```text
 CURRENT PROTOTYPE
         │
@@ -386,7 +389,7 @@ M1 — PROVE THE HARD PART
         └── Testnet Evidence
         │
         ▼
-M2 — SECURITY
+M2 — SECURITY & PRODUCTION HARDENING
         │
         ├── Threat Model
         ├── Fuzz & Invariants
@@ -395,10 +398,11 @@ M2 — SECURITY
         └── External Audit
         │
         ▼
-M3 — MAINNET
+M3 — MAINNET & ECOSYSTEM LIQUIDITY
         │
         ├── Production Deployment
         ├── Real Liquidity
+        ├── Base-Originating Liquidity
         ├── Real Borrowing/Lending
         ├── Production Liquidations
         └── Usage Metrics
@@ -408,16 +412,14 @@ LONG-TERM
         │
         ├── Ecosystem Integration
         ├── More Collateral
+        ├── ZEN Utility
         ├── Better Capital Efficiency
-        ├── ZEN Integration
         └── Protocol Growth
 ```
 
 ---
 
 # 8. Source-of-Truth Documentation
-
-The project documentation follows a simple separation of responsibilities:
 
 | Document                               | Purpose                                               |
 | -------------------------------------- | ----------------------------------------------------- |

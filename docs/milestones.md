@@ -10,11 +10,11 @@
 
 # 1. Milestone Overview
 
-| Milestone | Objective                       | Primary Outcome                                                                               | Status                       |
-| --------- | ------------------------------- | --------------------------------------------------------------------------------------------- | ---------------------------- |
-| M1        | Prove the hard part             | Demonstrate confidential lending state and ZK-enforced lending/liquidation on Horizen Testnet | **Technically demonstrated** |
-| M2        | Security & production hardening | Complete external security review and prepare the protocol for production                     | **Planned**                  |
-| M3        | Mainnet & real usage            | Deploy to Horizen Mainnet and demonstrate real lending-market usage                           | **Planned**                  |
+| Milestone | Objective                       | Primary Outcome                                                                                      | Status                       |
+| --------- | ------------------------------- | ---------------------------------------------------------------------------------------------------- | ---------------------------- |
+| M1        | Prove the hard part             | Demonstrate confidential lending state and ZK-enforced lending/liquidation on Horizen Testnet        | **Technically demonstrated** |
+| M2        | Security & production hardening | Complete external security review and prepare the protocol for production                            | **Planned**                  |
+| M3        | Mainnet & real usage            | Deploy to Horizen Mainnet, connect to ecosystem liquidity, and demonstrate real lending-market usage | **Planned**                  |
 
 The milestone progression is:
 
@@ -26,7 +26,7 @@ M2
 Security Review & Production Hardening
         ↓
 M3
-Mainnet Deployment & Real Usage
+Mainnet, Ecosystem Liquidity & Real Usage
 ```
 
 ---
@@ -350,13 +350,13 @@ Internal security reviews and automated testing do not replace an independent ex
 
 ---
 
-# 4. M3 — Mainnet & Real Usage
+# 4. M3 — Mainnet, Ecosystem Liquidity & Real Usage
 
 ## Objective
 
-Deploy VeilLend to Horizen Mainnet and demonstrate that the protocol can operate as a real lending market.
+Deploy VeilLend to Horizen Mainnet and demonstrate that the protocol can operate as a real lending market while connecting to the broader Horizen and Base liquidity ecosystem.
 
-Horizen's current Season 2 framework explicitly emphasizes demonstrated mainnet usage and in-market metrics such as users, transaction volume, TVL, and utilization.
+Horizen's Season 2 framework emphasizes demonstrated mainnet usage and in-market metrics such as users, transaction volume, TVL, and utilization.
 
 ---
 
@@ -394,7 +394,24 @@ Establish initial production liquidity for:
 
 Liquidity deployment should be sufficient to demonstrate meaningful protocol functionality without representing artificial or unsustainable usage.
 
-### D. Real Lending Activity
+### D. Base & Ecosystem Liquidity Integration
+
+VeilLend will connect to liquidity originating from the broader Base ecosystem through **existing Base ↔ Horizen bridging and ecosystem infrastructure**.
+
+VeilLend will not build a separate bridge. The protocol will remain focused on its lending functionality on Horizen while using existing infrastructure to make supported Base-originating assets available to Horizen lending markets.
+
+Planned work includes:
+
+* Integrate supported Base-originating assets into Horizen lending flows
+* Connect VeilLend to relevant Horizen ecosystem liquidity
+* Enable capital originating on Base to access supported VeilLend markets on Horizen
+* Support composable lending flows with ecosystem applications
+* Explore integrations with privacy-focused DeFi applications
+* Evaluate additional liquidity and interoperability integrations as the ecosystem develops
+
+Base connectivity is therefore an ecosystem and liquidity expansion path rather than a dependency for the core confidential lending mechanism.
+
+### E. Real Lending Activity
 
 Enable:
 
@@ -404,11 +421,11 @@ Enable:
 * Real withdrawals
 * Real liquidations
 
-### E. Production Liquidation
+### F. Production Liquidation
 
 Demonstrate that liquidation continues to work under real market conditions while preserving the protocol's privacy properties.
 
-### F. Usage Measurement
+### G. Usage Measurement
 
 Track:
 
@@ -444,6 +461,8 @@ Evidence should include:
 * Privacy-preservation evidence
 * Protocol accounting reconciliation
 * Operational monitoring evidence
+* Evidence of Base-originating liquidity access where applicable
+* Relevant ecosystem integration records
 
 ---
 
@@ -463,6 +482,7 @@ M3 is accepted when:
 * [ ] Privacy properties remain intact during production operation.
 * [ ] Meaningful usage metrics are recorded.
 * [ ] Results can be independently verified from on-chain data where appropriate.
+* [ ] Base-originating liquidity can access supported VeilLend markets through existing ecosystem infrastructure where applicable.
 
 ### M3 Status
 
@@ -476,7 +496,7 @@ All currently recorded deployment evidence is Testnet evidence unless explicitly
 
 Security is not limited to M2.
 
-The following properties must remain enforced throughout the project:
+The following properties must remain enforced throughout the project.
 
 ### Privacy
 
@@ -542,6 +562,8 @@ M3
 │
 ├── Production Infrastructure
 ├── Mainnet Deployment
+├── Ecosystem Liquidity
+├── Base-Originating Liquidity
 ├── Real Liquidity
 ├── Real Users
 └── Usage Metrics
@@ -618,14 +640,14 @@ M2 — Security & Production Hardening
         │
         └── PLANNED
 
-M3 — Mainnet & Real Usage
+M3 — Mainnet, Ecosystem Liquidity & Real Usage
         │
         └── PLANNED
 ```
 
 The current implementation has demonstrated the core privacy mechanism and confidential lending lifecycle on Horizen Testnet.
 
-The next major engineering objective is therefore **security hardening and independent review**, followed by production deployment and real market usage.
+The next major engineering objective is therefore **security hardening and independent review**, followed by production deployment, ecosystem liquidity integration, and real market usage.
 
 ---
 
@@ -633,15 +655,17 @@ The next major engineering objective is therefore **security hardening and indep
 
 VeilLend's milestone structure maps directly to the core progression expected by the Horizen S2 Builder Ecosystem Fund:
 
-| VeilLend Stage | Horizen S2 Focus                      |
-| -------------- | ------------------------------------- |
-| M1             | Prove the hard privacy capability     |
-| M2             | Security audit / production hardening |
-| M3             | Real mainnet usage                    |
+| VeilLend Stage | Horizen S2 Focus                             |
+| -------------- | -------------------------------------------- |
+| M1             | Prove the hard privacy capability            |
+| M2             | Security audit / production hardening        |
+| M3             | Real mainnet usage and ecosystem integration |
 
 Horizen's private borrow-lend RFP specifically identifies confidential collateral positions, confidential borrow sizes, confidential health factors, provable solvency, reliable interest-rate mechanics, and functioning liquidation without exposing borrowers as core requirements.
 
 VeilLend therefore treats these capabilities as first-class protocol requirements rather than optional features.
+
+The M3 stage additionally provides a path for connecting the protocol to liquidity originating from Base through existing ecosystem and bridging infrastructure, while keeping the core protocol deployment focused on Horizen.
 
 ---
 
