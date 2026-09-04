@@ -31,6 +31,24 @@ const config: HardhatUserConfig = {
       accounts: process.env.HORIZEN_TESTNET_PRIVATE_KEY ? [process.env.HORIZEN_TESTNET_PRIVATE_KEY] : [],
     },
   },
+  // Horizen Testnet explorer (Blockscout) — contract verification.
+  // Blockscout ignores the API key; a non-empty placeholder satisfies
+  // hardhat-verify's requirement.
+  etherscan: {
+    apiKey: {
+      horizenTestnet: "VeilLendHorizenS2Verification",
+    },
+    customChains: [
+      {
+        network: "horizenTestnet",
+        chainId: 2651420,
+        urls: {
+          apiURL: "https://explorer-testnet.horizen.io/api",
+          browserURL: "https://explorer-testnet.horizen.io/",
+        },
+      },
+    ],
+  },
 };
 
 export default config;
