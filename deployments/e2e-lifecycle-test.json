@@ -1,0 +1,68 @@
+{
+  "network": "horizenTestnet",
+  "positionId": "32",
+  "commitments": [
+    "11605676823374356781719411392380735188759200504609283401980144357596777852561",
+    "12534579822566124394250355008580618947991805111719684509602267525646792341644",
+    "15683257512964657956021941214674005291754778635063947173920365883172704385115",
+    "3481035565785337137245144246353243712723894430650852771658866812696989161696",
+    "12299157582625617997287260275831111542709168904625763379243504329873660437355"
+  ],
+  "transactions": [
+    {
+      "label": "createPosition",
+      "positionId": "32",
+      "txHash": "0x37e7c43e596c8327ba37561a086a9eea1423de2869fcf879158433fe1dc42f7d",
+      "block": "26780144",
+      "gasUsed": "148938"
+    },
+    {
+      "label": "deposit 50 vCOL (ZK)",
+      "positionId": "32",
+      "txHash": "0x1d4f8d1da304d98f2f9858a17773467b99500742c8649e881032ffd1eb278499",
+      "block": "26780158",
+      "gasUsed": "376137"
+    },
+    {
+      "label": "seed liquidity repay 20 vDBT (ZK)",
+      "positionId": "32",
+      "txHash": "0xd41e2af86c3ee91b0d0a1d9942949626314205e12401a646098095b119ba269e",
+      "block": "26780168",
+      "gasUsed": "354343"
+    },
+    {
+      "label": "borrow 10 vDBT (ZK, recipient-bound)",
+      "positionId": "32",
+      "txHash": "0x109dafbbfa4a035ccfffc91a3d3cc3101b2f264f678dfc939ac93b1be032dfe9",
+      "block": "26780174",
+      "gasUsed": "421674"
+    },
+    {
+      "label": "repay 10 vDBT (ZK)",
+      "positionId": "32",
+      "txHash": "0xe1f33f3d74107888bb192b1202f4ef49f146b0e4347bd82041055f9a96dd0b1b",
+      "block": "26780181",
+      "gasUsed": "352331"
+    },
+    {
+      "label": "withdraw 50 vCOL (ZK, recipient-bound)",
+      "positionId": "32",
+      "txHash": "0x29e368600fe22526c609686c26616a937391ae51695a1efc708ea2f79b202ee8",
+      "block": "26780188",
+      "gasUsed": "397183"
+    }
+  ],
+  "checks": {
+    "custodyRestored": true,
+    "supportedZeroed": true,
+    "outstandingZeroed": true,
+    "vcolRestored": true,
+    "vdbtNetFlowCorrect": true,
+    "sequenceFour": true,
+    "commitmentChainLength": true,
+    "finalCommitmentOnChain": true,
+    "hiddenCollateralZero": true,
+    "hiddenDebtZero": true
+  },
+  "totalGas": "2050606"
+}

@@ -9,7 +9,6 @@ typechain-types/
 .env.*.local
 artifacts-zk/
 tools/
-deployments/
 *.log
 .DS_Store
 demo/node_modules/
