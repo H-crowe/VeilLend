@@ -842,17 +842,20 @@ Additional security analysis is documented in [`docs/phase3.md`](docs/phase3.md)
 
 ---
 
+
+## Contact
+
+- Telegram: https://t.me/cr0wel
+
+## Project Status
+
+Working testnet prototype for Horizen S2: private position commitments, Groth16 ZK proofs, private solvency, confidential liquidation, replay protection, recipient binding, public accounting safeguards, browser-side proof generation, encrypted private-state recovery prototype, and a working Horizen testnet frontend.
+
+The current release is a testnet prototype and has not undergone a production security audit. Production milestones include Stork oracle integration, broader collateral support, utilization-based interest economics, ecosystem liquidity, mainnet deployment, and additional security hardening.
+
 ## License
 
-MIT for the protocol contracts.
+VeilLend's original protocol and application code is released under the MIT License.
 
-The generated `snarkjs` Solidity verifiers retain the licensing indicated in their generated headers.
-
----
-
-## License
-
-MIT for the protocol contracts and application code.
-
-The snarkjs-generated Solidity verifiers inherit snarkjs licensing (GPL-3.0)
-as marked in their headers.
+The snarkjs-generated Solidity verifiers under `contracts/zk/` retain their
+GPL-3.0 licensing as indicated by their SPDX headers.
