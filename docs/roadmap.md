@@ -30,7 +30,7 @@ VeilLend has demonstrated the core confidential lending mechanism required by th
 * Oracle freshness and price-bound validation
 * Security regression tests
 * Fuzz and invariant testing
-* Recovery / escape mechanism prototype
+* Encrypted private-state recovery prototype (client-side)
 * Horizen Testnet deployment
 * Browser-based demonstration
 * End-to-end proof and liquidation evidence
@@ -426,8 +426,7 @@ LONG-TERM
 | `docs/roadmap.md`                      | Overall project direction and development progression |
 | `docs/milestones.md`                   | Detailed milestone objectives and acceptance criteria |
 | `docs/M1-evidence.md`                  | Recorded evidence of the M1 technical achievement     |
-| `docs/privacy-model.md`                | Privacy architecture and visibility model             |
-| `docs/zk-poc.md`                       | ZK proof-of-concept documentation                     |
+| `architecture.md`                      | Privacy architecture, visibility model and design reference |
 | `docs/testnet-proof-evidence.md`       | Testnet proof-chain evidence                          |
 | `docs/testnet-liquidation-evidence.md` | Testnet liquidation evidence                          |
 | `docs/liquidation-model.md`            | Confidential liquidation design                       |
