@@ -52,12 +52,12 @@ the verification equation guarantees.
 positionId, positionCommitment, collateralPrice, debtPrice, maxLtvBps
 ```
 
-### risk_transition.circom — public (12, exact order)
+### risk_transition.circom — public (13, exact order)
 
 ```text
 positionId, oldCommitment, newCommitment, nullifier, actionId,
 newSequence, currentIndexLo, currentIndexHi, amount,
-collateralPrice, debtPrice, maxLtvBps
+collateralPrice, debtPrice, maxLtvBps, recipient
 ```
 
 ### liquidation.circom — public (7, outputs first)

@@ -1,8 +1,12 @@
 # VeilLend — Phase 3 Report (ZK Solvency, Borrow/Withdraw, Confidential Liquidation)
 
-Status: implemented and tested. Phase 2 behavior preserved. Nothing is
-deployed to Horizen; the trusted setup remains a single deterministic
-contribution (PoC); the circuits are unaudited.
+Status: implemented and tested. Phase 2 behavior preserved.
+
+> **Deployment note (post-report):** nothing was deployed to Horizen at the
+> time this report was written; the full stack was subsequently deployed to
+> the Horizen Testnet and verified on the explorer (see README /
+> deployments). The trusted setup remains a single deterministic
+> contribution (PoC); the circuits are unaudited.
 
 ## What was built
 
@@ -105,6 +109,7 @@ Confidential Settlement            (VeilLend.liquidate → Closed)
 - No liquidation incentive/bonus; residual debt socialized; no reserve
   accounting for bad debt.
 - Witness availability for liquidation is not decentralized yet.
-- Deterministic single-contribution trusted setup; unaudited; not deployed.
+- Deterministic single-contribution trusted setup; unaudited (deployments
+  followed after this report was written).
 - Per-action amounts are public (ERC20 layer) — position privacy, not
   transaction privacy.

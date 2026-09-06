@@ -40,7 +40,7 @@ debtOut       = min(debt, ceil(collateral * collateralPrice / debtPrice))
 |---|---|
 | Liquidator | prices, threshold, the proof, and the settlement amounts (public at the token layer); **NOT** the private balances, the control secret, or any pre-settlement state detail |
 | Contract / observers | the same public data: position id, commitment hash, prices, threshold, settlement amounts, and that eligibility was proven |
-| ZK circuit (verifier) | only the 7 public signals — the hidden state enters solely through the Groth16 verification equation |
+| ZK circuit (verifier) | only the 8 public signals (6 inputs + 2 settlement outputs) — the hidden state enters solely through the Groth16 verification equation |
 | Position owner (proof holder) | the private state; generates the eligibility proof |
 
 ## 4. Settlement flow (`VeilLend.liquidate`)

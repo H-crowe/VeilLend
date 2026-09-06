@@ -161,8 +161,8 @@ nullifiers cannot be linked to commitments without brute-forcing the secret.
 
 ## 6. State transition circuit
 
-`circuits/state_transition.circom` — 7471 constraints, 10 public inputs, 9
-private inputs (plus the 9 public), Groth16 over BN254.
+`circuits/state_transition.circom` — 7875 constraints, 9 public inputs, 14
+private inputs, Groth16 over BN254.
 
 The circuit proves:
 
@@ -271,10 +271,11 @@ The per-position split stays hidden: on-chain state stores only the
 aggregate. `debtCustody(asset)` similarly accumulates repaid tokens
 (protocol reserve until the private supply side exists).
 
-**Borrow / withdraw / close:** fail closed (`UnsupportedAction`) after basic
-validation — they need a private solvency proof (borrow/withdraw) and a
-settlement path (close), which are later phases. No plaintext fallback
-exists for any of them.
+**Borrow / withdraw:** fully implemented (Phase 3) — proof-gated via
+`_applyVerifiedRiskTransition` with on-chain-derived prices/LTV and 1:1
+custody payouts. **Close:** remains fail-closed (`UnsupportedAction`) —
+the settlement path is not implemented. No plaintext fallback exists for
+any of them.
 
 ---
 
@@ -306,7 +307,7 @@ of the commitment/nullifier constructions — no duplication):
 | Circuit | Constraints | Public signals (exact order) |
 |---|---|---|
 | state_transition (deposit=1, repay=2) | 7875 | positionId, oldCommitment, newCommitment, nullifier, actionId, newSequence, currentIndexLo, currentIndexHi, publicAmount |
-| solvency | ~2.8k | positionId, positionCommitment, collateralPrice, debtPrice, maxLtvBps |
+| solvency | ~2.7k | positionId, positionCommitment, collateralPrice, debtPrice, maxLtvBps |
 | risk_transition (borrow=3, withdraw=4) | ~7.5k | the 9 transition fields + collateralPrice, debtPrice, maxLtvBps, **recipient** |
 | liquidation | ~3.5k | collateralOut, debtOut, positionId, positionCommitment, collateralPrice, debtPrice, liquidationThresholdBps, **recipient** |
 
@@ -349,15 +350,15 @@ tables). Summary:
   (UnsupportedAction). No custody backdoor exists behind the pause.
 - Admin (`Ownable2Step`) manages parameters/assets/oracle/staleness/pause
   only. No fund-moving function exists (ABI whitelist test).
-- Oracle boundary `getFreshPrice` enforces freshness; risky operations will
-  gate on it when their proof logic lands.
+- Oracle boundary `getFreshPrice` enforces freshness; borrow, withdraw and
+  liquidate gate on it on-chain (stale/absent prices revert).
 
 ---
 
 ## 12. Reproducibility
 
 ```bash
-npm run zk:build   # compile circuit → ptau (2^13) → zkey → Groth16Verifier.sol
+npm run zk:build   # compile circuits → ptau (2^14) → zkeys → Groth16 verifiers
 npm run prove      # private state → commitment → proof → local verification
 npm test           # full suite (unit + ZK + fuzz/invariant)
 ```
@@ -381,8 +382,11 @@ multi-party ceremony is required before any mainnet-style deployment
 5. **Per-action amounts public** (see §10); fee-on-transfer tokens rejected.
 6. **Trusted setup is a single deterministic contribution** (PoC); circuits
    unaudited.
-7. **No Horizen deployment.** Standard EVM bytecode (`evmVersion: paris`)
-   keeps compatibility; nothing is deployed or claimed.
+7. **Horizen Testnet deployment (current).** Standard EVM bytecode
+   (`evmVersion: paris`) kept the stack deployable across Horizen
+   environments; the full protocol is deployed and Blockscout-verified (see
+   README / deployments) — but the deployment is immutable: any circuit
+   change requires a new deployment.
 
 ---
 
@@ -394,33 +398,41 @@ borrow/withdraw transitions gated on it, then liquidation-eligibility proofs
 and confidential liquidation. The commitment/nullifier/transition machinery
 from this phase carries over unchanged.
 
-Repository scope (Phase 2):
+Repository structure (current):
 
 ```text
 VeilLend/
 ├── circuits/
 │   ├── veillend_lib.circom       # shared commitment/nullifier/arithmetic templates
 │   ├── state_transition.circom   # deposit / repay
-│   ├── solvency.circom           # private health proof
+│   ├── solvency.circom           # private solvency proof
 │   ├── risk_transition.circom    # borrow / withdraw with post-action solvency
 │   └── liquidation.circom        # eligibility + settlement outputs
 ├── contracts/
 │   ├── VeilLend.sol              # protocol surface + 4 Groth16 verifier integrations
-│   └── zk/                       # generated, real verifiers (4)
-├── contracts/test/               # TokenMock, MockPriceOracle (test-only)
+│   ├── zk/                       # generated, real verifiers (4)
+│   └── test/                     # TokenMock, MockPriceOracle (test-only)
 ├── scripts/
-│   └── prove.ts                  # prover library + zk:build + demo
-├── test/
-│   ├── VeilLend.test.ts          # on-chain unit tests (incl. proof integration)
-│   ├── zk.test.ts                # circuit-level tests
-│   ├── solvency.test.ts          # Phase 3 M1: solvency proof tests
-│   ├── risk.test.ts              # Phase 3 M2: borrow/withdraw tests
-│   ├── liquidation.test.ts       # Phase 3 M3: liquidation tests
-│   └── VeilLend.invariant.ts     # seeded fuzz/invariant harness
-├── docs/                         # solvency / oracle / liquidation / phase3 models
-├── README.md
+│   ├── prove.ts                  # prover library + zk:build + local demo
+│   ├── deploy.ts                 # Horizen Testnet deployment (full stack)
+│   ├── deploy-riskfix.ts         # repaired deployment (fixed risk verifier + VeilLend)
+│   ├── e2e-riskfix.ts            # resumable lifecycle E2E (deploy → verify → reconcile)
+│   ├── proof-test.ts             # on-chain ZK proof integration test
+│   ├── liquidation-test.ts       # on-chain confidential liquidation test
+│   └── verify-network.ts         # read-only network/deployment precheck
+├── test/                         # unit / ZK / solvency / risk / risk-gate / adversarial / liquidation / fuzz
+├── demo/                         # Next.js browser app (in-browser Groth16 proving)
+│   ├── app/                      # main page + /recovery-test + /sigtest
+│   ├── lib/                      # witness/poseidon/recovery/store/tx guard
+│   ├── public/zk/                # browser proving artifacts (wasm/zkey)
+│   ├── tests/                    # persistence / recovery / signature-determinism
+│   └── README.md
+├── deployments/                  # address book + deployment/E2E evidence records
+├── docs/                         # milestones, roadmap, models, evidence packages
 ├── architecture.md               # this document
-├── package.json
+├── README.md
+├── LICENSE                       # MIT (verifiers: GPL-3.0 per their headers)
 ├── hardhat.config.ts
+├── package.json
 └── tsconfig.json
 ```
