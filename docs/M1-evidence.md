@@ -230,6 +230,7 @@ and the M2 audit are prerequisites.
 | M1 evidence (this document) | docs/M1-evidence.md |
 | Testnet deployment record | deployments/horizenTestnet.json |
 | ZK proof evidence (deposit/withdraw) | deployments/onchain-proof-test.json |
+| M1 lifecycle E2E (create → deposit → borrow → repay → withdraw) | deployments/e2e-lifecycle-test.json — **historical M1 lifecycle evidence from the earlier deployment (Position #32); retained as valid historical M1 evidence** |
 | Liquidation evidence | deployments/testnet-liquidation-proof-test.json |
 | Testnet proof documentation | docs/testnet-proof-evidence.md |
 | Liquidation documentation | docs/testnet-liquidation-evidence.md |
