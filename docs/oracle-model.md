@@ -57,11 +57,21 @@ in the same transaction, so a proof computed against newer prices reverts
    produce economically wrong (but still internally consistent) results.
    Feed validation is production work.
 
-## 5. Production gap (documented, not implemented)
+## 5. Stork integration (implemented in code, not yet deployed)
 
-Production direction for the Horizen deployment: integrate the
-**Horizen Stork oracle** behind the same freshness/bounds interface — the
-current `MockPriceOracle` is testnet/demo infrastructure only.
+The **Horizen Stork push oracle** integration is implemented behind the same
+freshness/bounds interface: `IPriceOracle` → `StorkPriceOracle` adapter →
+official Stork contract interface (`IStork`/`StorkStructs`), with registry
+feed IDs for ETHUSD/USDCUSD, per-asset feed registration (owner-only), and a
+permissionless same-transaction flow — a publisher-signed snapshot is relayed
+through `VeilLend.pushOracleUpdate` and consumed by the user's ZK proof in one
+transaction. Local tests cover the full path against the mocked Stork
+interface (`test/stork-integration.test.ts`).
+
+Not yet deployed: the live testnet deployment still runs `MockPriceOracle`,
+and Stork's Horizen testnet feeds are not actively published. Multi-source
+aggregation, deviation/heartbeat checks, sequencer/uptime feeds, and
+liquidation-grade price safety remain deliberately out of scope.
 
 Multi-source aggregation, deviation/heartbeat checks, sequencer/uptime
 feeds, and liquidation-grade price safety are deliberately NOT built in

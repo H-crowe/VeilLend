@@ -1,37 +1,6 @@
 [
   {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "owner_",
-        "type": "address"
-      },
-      {
-        "internalType": "address",
-        "name": "verifier_",
-        "type": "address"
-      },
-      {
-        "internalType": "address",
-        "name": "solvencyVerifier_",
-        "type": "address"
-      },
-      {
-        "internalType": "address",
-        "name": "riskVerifier_",
-        "type": "address"
-      },
-      {
-        "internalType": "address",
-        "name": "liquidationVerifier_",
-        "type": "address"
-      },
-      {
-        "internalType": "address",
-        "name": "initialOracle_",
-        "type": "address"
-      }
-    ],
+    "inputs": [],
     "stateMutability": "nonpayable",
     "type": "constructor"
   },
@@ -85,6 +54,22 @@
     "type": "error"
   },
   {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "implementation",
+        "type": "address"
+      }
+    ],
+    "name": "ERC1967InvalidImplementation",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "ERC1967NonPayable",
+    "type": "error"
+  },
+  {
     "inputs": [],
     "name": "EnforcedPause",
     "type": "error"
@@ -126,6 +111,11 @@
   },
   {
     "inputs": [],
+    "name": "InvalidInitialization",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "InvalidLiquidationAmount",
     "type": "error"
   },
@@ -161,7 +151,23 @@
   },
   {
     "inputs": [],
+    "name": "NotInitializing",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "OracleNotSet",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes",
+        "name": "returnData",
+        "type": "bytes"
+      }
+    ],
+    "name": "OracleUpdateFailed",
     "type": "error"
   },
   {
@@ -230,6 +236,22 @@
   {
     "inputs": [],
     "name": "TransitionConsumed",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "UUPSUnauthorizedCallContext",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "slot",
+        "type": "bytes32"
+      }
+    ],
+    "name": "UUPSUnsupportedProxiableUUID",
     "type": "error"
   },
   {
@@ -395,6 +417,19 @@
       }
     ],
     "name": "Deposit",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "version",
+        "type": "uint64"
+      }
+    ],
+    "name": "Initialized",
     "type": "event"
   },
   {
@@ -679,6 +714,19 @@
     "inputs": [
       {
         "indexed": true,
+        "internalType": "address",
+        "name": "implementation",
+        "type": "address"
+      }
+    ],
+    "name": "Upgraded",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
         "internalType": "uint256",
         "name": "positionId",
         "type": "uint256"
@@ -701,87 +749,34 @@
   },
   {
     "inputs": [],
-    "name": "ACTION_BORROW",
+    "name": "UPGRADE_INTERFACE_VERSION",
     "outputs": [
       {
-        "internalType": "uint256",
+        "internalType": "string",
         "name": "",
-        "type": "uint256"
+        "type": "string"
       }
     ],
     "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "ACTION_DEPOSIT",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "ACTION_REPAY",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "ACTION_WITHDRAW",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "SNARK_SCALAR_FIELD",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "acceptOwnership",
-    "outputs": [],
-    "stateMutability": "nonpayable",
     "type": "function"
   },
   {
     "inputs": [
       {
         "internalType": "address",
-        "name": "debtAsset",
+        "name": "",
         "type": "address"
       }
     ],
-    "name": "accrueInterest",
-    "outputs": [],
-    "stateMutability": "nonpayable",
+    "name": "assetDecimals",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
     "type": "function"
   },
   {
@@ -881,76 +876,6 @@
   {
     "inputs": [
       {
-        "internalType": "uint256",
-        "name": "positionId",
-        "type": "uint256"
-      }
-    ],
-    "name": "closePosition",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "name": "collateralCustody",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "name": "collateralSupported",
-    "outputs": [
-      {
-        "internalType": "bool",
-        "name": "",
-        "type": "bool"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "bytes32",
-        "name": "",
-        "type": "bytes32"
-      }
-    ],
-    "name": "consumedTransitions",
-    "outputs": [
-      {
-        "internalType": "bool",
-        "name": "",
-        "type": "bool"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
         "internalType": "address",
         "name": "collateralAsset",
         "type": "address"
@@ -991,68 +916,6 @@
         "internalType": "uint256",
         "name": "",
         "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "name": "debtCustody",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "name": "debtIndexStates",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "index",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint64",
-        "name": "lastAccrual",
-        "type": "uint64"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "name": "debtSupported",
-    "outputs": [
-      {
-        "internalType": "bool",
-        "name": "",
-        "type": "bool"
       }
     ],
     "stateMutability": "view",
@@ -1199,25 +1062,73 @@
   {
     "inputs": [
       {
-        "internalType": "address",
-        "name": "asset",
-        "type": "address"
-      }
-    ],
-    "name": "getFreshPrice",
-    "outputs": [
-      {
         "internalType": "uint256",
-        "name": "price",
+        "name": "positionId",
         "type": "uint256"
       },
       {
         "internalType": "uint256",
-        "name": "updatedAt",
+        "name": "amount",
         "type": "uint256"
+      },
+      {
+        "internalType": "address",
+        "name": "collateralAsset",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "debtAsset",
+        "type": "address"
+      }
+    ],
+    "name": "exceedsBorrowCap",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
       }
     ],
     "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "owner_",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "verifier_",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "solvencyVerifier_",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "riskVerifier_",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "liquidationVerifier_",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "initialOracle_",
+        "type": "address"
+      }
+    ],
+    "name": "initialize",
+    "outputs": [],
+    "stateMutability": "nonpayable",
     "type": "function"
   },
   {
@@ -1260,19 +1171,6 @@
   },
   {
     "inputs": [],
-    "name": "liquidationVerifier",
-    "outputs": [
-      {
-        "internalType": "contract ILiquidationVerifier",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
     "name": "maxPriceStaleness",
     "outputs": [
       {
@@ -1282,6 +1180,25 @@
       }
     ],
     "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes[]",
+        "name": "data",
+        "type": "bytes[]"
+      }
+    ],
+    "name": "multicall",
+    "outputs": [
+      {
+        "internalType": "bytes[]",
+        "name": "results",
+        "type": "bytes[]"
+      }
+    ],
+    "stateMutability": "nonpayable",
     "type": "function"
   },
   {
@@ -1313,32 +1230,6 @@
   {
     "inputs": [],
     "name": "owner",
-    "outputs": [
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "paused",
-    "outputs": [
-      {
-        "internalType": "bool",
-        "name": "",
-        "type": "bool"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "pendingOwner",
     "outputs": [
       {
         "internalType": "address",
@@ -1394,54 +1285,29 @@
     "type": "function"
   },
   {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "name": "rateConfigs",
+    "inputs": [],
+    "name": "proxiableUUID",
     "outputs": [
       {
-        "internalType": "uint64",
-        "name": "baseRateBps",
-        "type": "uint64"
-      },
-      {
-        "internalType": "uint64",
-        "name": "slopeBps",
-        "type": "uint64"
-      },
-      {
-        "internalType": "uint64",
-        "name": "targetUtilizationBps",
-        "type": "uint64"
-      },
-      {
-        "internalType": "uint64",
-        "name": "reserveFactorBps",
-        "type": "uint64"
-      },
-      {
-        "internalType": "uint64",
-        "name": "maxLtvBps",
-        "type": "uint64"
-      },
-      {
-        "internalType": "uint64",
-        "name": "liquidationThresholdBps",
-        "type": "uint64"
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
       }
     ],
     "stateMutability": "view",
     "type": "function"
   },
   {
-    "inputs": [],
-    "name": "renounceOwnership",
+    "inputs": [
+      {
+        "internalType": "bytes",
+        "name": "oracleUpdateData",
+        "type": "bytes"
+      }
+    ],
+    "name": "pushOracleUpdate",
     "outputs": [],
-    "stateMutability": "nonpayable",
+    "stateMutability": "payable",
     "type": "function"
   },
   {
@@ -1520,121 +1386,6 @@
     "type": "function"
   },
   {
-    "inputs": [],
-    "name": "riskVerifier",
-    "outputs": [
-      {
-        "internalType": "contract IRiskVerifier",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "maxPriceStaleness_",
-        "type": "uint256"
-      }
-    ],
-    "name": "setMaxPriceStaleness",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "oracle_",
-        "type": "address"
-      }
-    ],
-    "name": "setOracle",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "bool",
-        "name": "paused_",
-        "type": "bool"
-      }
-    ],
-    "name": "setPaused",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "asset",
-        "type": "address"
-      },
-      {
-        "components": [
-          {
-            "internalType": "uint64",
-            "name": "baseRateBps",
-            "type": "uint64"
-          },
-          {
-            "internalType": "uint64",
-            "name": "slopeBps",
-            "type": "uint64"
-          },
-          {
-            "internalType": "uint64",
-            "name": "targetUtilizationBps",
-            "type": "uint64"
-          },
-          {
-            "internalType": "uint64",
-            "name": "reserveFactorBps",
-            "type": "uint64"
-          },
-          {
-            "internalType": "uint64",
-            "name": "maxLtvBps",
-            "type": "uint64"
-          },
-          {
-            "internalType": "uint64",
-            "name": "liquidationThresholdBps",
-            "type": "uint64"
-          }
-        ],
-        "internalType": "struct VeilLend.RateConfig",
-        "name": "config",
-        "type": "tuple"
-      }
-    ],
-    "name": "setRateConfig",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "solvencyVerifier",
-    "outputs": [
-      {
-        "internalType": "contract ISolvencyVerifier",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
     "inputs": [
       {
         "internalType": "uint256",
@@ -1657,129 +1408,18 @@
     "inputs": [
       {
         "internalType": "address",
-        "name": "newOwner",
+        "name": "newImplementation",
         "type": "address"
+      },
+      {
+        "internalType": "bytes",
+        "name": "data",
+        "type": "bytes"
       }
     ],
-    "name": "transferOwnership",
+    "name": "upgradeToAndCall",
     "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "verifier",
-    "outputs": [
-      {
-        "internalType": "contract IGroth16Verifier",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "positionId",
-        "type": "uint256"
-      },
-      {
-        "internalType": "uint256[2]",
-        "name": "pA",
-        "type": "uint256[2]"
-      },
-      {
-        "internalType": "uint256[2][2]",
-        "name": "pB",
-        "type": "uint256[2][2]"
-      },
-      {
-        "internalType": "uint256[2]",
-        "name": "pC",
-        "type": "uint256[2]"
-      }
-    ],
-    "name": "verifySolvency",
-    "outputs": [],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "components": [
-          {
-            "internalType": "uint256",
-            "name": "positionId",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "oldCommitment",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "newCommitment",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "nullifier",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "actionId",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "newSequence",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "currentIndexLo",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "currentIndexHi",
-            "type": "uint256"
-          },
-          {
-            "internalType": "uint256",
-            "name": "publicAmount",
-            "type": "uint256"
-          }
-        ],
-        "internalType": "struct VeilLend.TransitionInputs",
-        "name": "t",
-        "type": "tuple"
-      },
-      {
-        "internalType": "uint256[2]",
-        "name": "pA",
-        "type": "uint256[2]"
-      },
-      {
-        "internalType": "uint256[2][2]",
-        "name": "pB",
-        "type": "uint256[2][2]"
-      },
-      {
-        "internalType": "uint256[2]",
-        "name": "pC",
-        "type": "uint256[2]"
-      }
-    ],
-    "name": "withdrawCollateral",
-    "outputs": [],
-    "stateMutability": "nonpayable",
+    "stateMutability": "payable",
     "type": "function"
   }
 ]

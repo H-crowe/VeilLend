@@ -48,14 +48,11 @@ async function deployFixture() {
   const solvencyVerifier = await (await ethers.getContractFactory("SolvencyVerifier")).deploy();
   const riskVerifier = await (await ethers.getContractFactory("RiskTransitionVerifier")).deploy();
   const liquidationVerifier = await (await ethers.getContractFactory("LiquidationVerifier")).deploy();
-  const veil = (await (await ethers.getContractFactory("VeilLend")).deploy(
-    owner.address,
-    await verifier.getAddress(),
-    await solvencyVerifier.getAddress(),
-    await riskVerifier.getAddress(),
-    await liquidationVerifier.getAddress(),
-    await oracle.getAddress()
-  )) as VeilLend;
+  const veil = ((await upgrades.deployProxy(
+            await ethers.getContractFactory("VeilLend"),
+            [owner.address, await verifier.getAddress(), await solvencyVerifier.getAddress(), await riskVerifier.getAddress(), await liquidationVerifier.getAddress(), await oracle.getAddress()],
+            { kind: "uups" },
+          ))) as VeilLend;
 
   await veil.connect(owner).enableCollateralAsset(await collateral.getAddress());
   await veil.connect(owner).enableDebtAsset(await debt.getAddress(), RATE);
@@ -288,7 +285,7 @@ describe("F1/F2/F3 regressions — fabricated initial commitments are inert", ()
     const b = await buildRiskTransition({
       oldState: dep.newState,
       actionId: ACTION_BORROW,
-      amount: 75n * WAD, // exactly at the cap: 100e18 * 7500 / 10000
+      amount: 100n * WAD, // $100 of debt ≤ the $150 price-scaled dollar cap
       currentIndex: await veil.currentDebtIndex(await debt.getAddress()),
       newSalt: BigInt(randHex()),
       params: PARAMS,
@@ -296,13 +293,14 @@ describe("F1/F2/F3 regressions — fabricated initial commitments are inert", ()
     });
     const bProof = await generateProof(b.inputs, "risk_transition");
     await veil.connect(victim).borrow(toInputs(b.publicSignals), bProof.callArgs.pA, bProof.callArgs.pB, bProof.callArgs.pC);
-    expect(await veil.borrowOutstanding(id)).to.equal(75n * WAD);
+    expect(await veil.borrowOutstanding(id)).to.equal(100n * WAD);
 
-    // one wei above the cap is rejected
+    // one dollar-above the new price-scaled dollar cap is rejected:
+    // dollar cap = 100 vCOL × $2 × 75% = $150 → outstanding + amount > 150e18
     const b2 = await buildRiskTransition({
       oldState: b.newState,
       actionId: ACTION_BORROW,
-      amount: 1n,
+      amount: 76n * WAD,
       currentIndex: await veil.currentDebtIndex(await debt.getAddress()),
       newSalt: BigInt(randHex()),
       params: PARAMS,
@@ -312,11 +310,11 @@ describe("F1/F2/F3 regressions — fabricated initial commitments are inert", ()
     await expect(veil.connect(victim).borrow(toInputs(b2.publicSignals), b2Proof.callArgs.pA, b2Proof.callArgs.pB, b2Proof.callArgs.pC)).to.be
       .revertedWithCustomError(veil, "BorrowCapExceeded");
 
-    // repayment restores capacity (repay 80e18 incl. interest → outstanding clamps to 0)
+    // repayment restores capacity (repay the full outstanding incl. interest → clamps to 0)
     const r = await buildTransition({
       oldState: b.newState,
       actionId: 2n,
-      amount: 80n * WAD,
+      amount: 100n * WAD,
       currentIndex: await veil.currentDebtIndex(await debt.getAddress()),
       newSalt: BigInt(randHex()),
     });

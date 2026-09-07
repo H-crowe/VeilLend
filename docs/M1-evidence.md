@@ -151,7 +151,7 @@ contain deployed code on-chain):
 
 ## 6. Automated test evidence (verified against the repository)
 
-- **Full local suite: 111/111 passing at the time of this M1 record** (120 passing in the current repository) (`npm test` — unit, circuit-level,
+- **Full local suite: 111/111 passing at the time of this M1 record** (156 passing in the current repository) (`npm test` — unit, circuit-level,
   solvency, risk, liquidation incl. the five audit-gap tests, adversarial
   recipient-binding A–I, supported-collateral F1–F3 regressions, seeded
   fuzz/invariant harness).
@@ -210,8 +210,8 @@ Testnet: private state is represented through cryptographic commitments,
 real ZK proofs enforce state transitions and risk rules, deployed Solidity
 verifiers perform on-chain verification, and confidential liquidation has
 been successfully executed with recorded transaction evidence and 111/111
-local regression tests at the time of the record (120 passing in the current
-repository).
+local regression tests at the time of the record (132 passing in the
+current repository).
 
 ### M2 — Security Audit
 **Status: NOT COMPLETE.** Internal testing and an internal security review

@@ -68,14 +68,11 @@ async function deployFixture() {
   const solvencyVerifier = await (await ethers.getContractFactory("SolvencyVerifier")).deploy();
   const riskVerifier = await (await ethers.getContractFactory("RiskTransitionVerifier")).deploy();
   const liquidationVerifier = await (await ethers.getContractFactory("LiquidationVerifier")).deploy();
-  const veil = (await (await ethers.getContractFactory("VeilLend")).deploy(
-    owner.address,
-    await verifier.getAddress(),
-    await solvencyVerifier.getAddress(),
-    await riskVerifier.getAddress(),
-    await liquidationVerifier.getAddress(),
-    await oracle.getAddress()
-  )) as VeilLend;
+  const veil = ((await upgrades.deployProxy(
+            await ethers.getContractFactory("VeilLend"),
+            [owner.address, await verifier.getAddress(), await solvencyVerifier.getAddress(), await riskVerifier.getAddress(), await liquidationVerifier.getAddress(), await oracle.getAddress()],
+            { kind: "uups" },
+          ))) as VeilLend;
 
   await veil.connect(owner).enableCollateralAsset(await collateral.getAddress());
   await veil.connect(owner).enableDebtAsset(await debt.getAddress(), RATE);
@@ -166,8 +163,11 @@ describe("Phase 3 M1 — ZK solvency proof", () => {
       const huge = sampleState({ collateral: 2n ** 128n, debt: 0n });
       const w = await buildSolvencyWitness(huge, PARAMS);
       await expect(generateProof(w.inputs, "solvency")).to.be.rejected;
-      // price ≥ 2^64 likewise
-      const badPrice = { ...PARAMS, collateralPrice: 2n ** 64n };
+      // price ≥ 2^104 (the normalized-price range) likewise — the raw oracle
+      // price is bounded < 2^64 at the contract boundary (F4), and the
+      // 18-dec normalization scales it by ≤ 1e12, so the circuit-level guard
+      // rejects normalized prices ≥ 2^104.
+      const badPrice = { ...PARAMS, collateralPrice: 2n ** 104n };
       const w2 = await buildSolvencyWitness(sampleState(), badPrice);
       await expect(generateProof(w2.inputs, "solvency")).to.be.rejected;
     });

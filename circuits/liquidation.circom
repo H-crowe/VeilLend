@@ -65,9 +65,9 @@ template Liquidation() {
     signal input salt;
 
     // ---- range checks
-    component rcCollPrice = RangeCheck(64);
+    component rcCollPrice = RangeCheck(104);
     rcCollPrice.in <== collateralPrice;
-    component rcDebtPrice = RangeCheck(64);
+    component rcDebtPrice = RangeCheck(104);
     rcDebtPrice.in <== debtPrice;
     component rcThresh = RangeCheck(14);
     rcThresh.in <== liquidationThresholdBps;
@@ -112,7 +112,7 @@ template Liquidation() {
     signal rhs;
     rhs <== debtVal * liquidationThresholdBps;
 
-    component eligible = LessThan(207);
+    component eligible = LessThan(223);
     eligible.in[0] <== lhs;
     eligible.in[1] <== rhs;
     eligible.out === 1;

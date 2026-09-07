@@ -229,14 +229,18 @@ This public accounting value tracks cumulative outstanding borrowing for protoco
 Borrowing is additionally constrained by the public custody ledger:
 
 ```text
-outstanding + amount
+(outstanding + amount) × debtPrice × 10^collateralDecimals × 10000
     ≤
-supportedCollateral × maxLtvBps / 10000
+supportedCollateral × collateralPrice × 10^debtDecimals × maxLtvBps
 ```
 
 If this limit is exceeded, the transaction fails with `BorrowCapExceeded`.
 
-This provides defense in depth alongside the private ZK solvency check.
+The cap is a cross-multiplied DOLLAR-VALUE limit: debt and collateral
+tokens with different decimals (e.g. 18 vs 6) are normalized through the
+oracle prices and each asset's recorded decimals, so the comparison stays
+economically exact. This provides defense in depth alongside the private ZK
+solvency check (which uses the same 18-dec-normalized price inputs).
 
 ### Withdraw Protection
 
@@ -381,9 +385,9 @@ The testnet oracle is **not production infrastructure**.
 
 ### Production Direction
 
-The planned production integration is the **Horizen Stork oracle** behind the same freshness and price-validation interface.
+The **Horizen Stork oracle** integration is implemented in the repository behind the same freshness and price-validation interface: a `StorkPriceOracle` adapter (`IPriceOracle` → Stork push oracle), official registry feed IDs for ETHUSD/USDCUSD, and a permissionless same-transaction flow (signed Stork snapshot relayed and consumed by the user's proof in one transaction via `pushOracleUpdate`). It is **not deployed yet** — the current testnet deployment still runs the mock oracle, and Stork's testnet feeds are not actively published.
 
-This allows the privacy and risk architecture to remain separated from the current testnet oracle implementation.
+This keeps the privacy and risk architecture separated from the oracle implementation.
 
 ---
 
@@ -492,7 +496,7 @@ The current repository contains the following previously completed verification 
 
 ### Root Protocol Tests
 
-**120 tests passing**
+**156 tests passing**
 
 Coverage includes:
 
@@ -507,7 +511,14 @@ Coverage includes:
 * liquidation;
 * replay protection;
 * fuzzing;
-* invariant testing.
+* invariant testing;
+* a local end-to-end lifecycle suite (`test/e2e-lifecycle.test.ts`, 14 tests)
+  exercising **all six supported asset pairs** (vCOL/WETH/USDC collateral ×
+  vDBT/USDC debt, 6 and 18 decimals) through create → deposit → borrow →
+  repay → withdraw with per-step commitment/sequence/balance checks, plus
+  negative cases: unsupported asset, over-borrow (value-based decimal-aware
+  cap), stale oracle snapshot, tampered proof, wrong-asset witness, replayed
+  proof, invalid withdrawal, and no partial state on failure.
 
 ### Browser Demo Tests
 
@@ -615,11 +626,7 @@ Connect wallet
 
       ↓
 
-Create position
-
-      ↓
-
-Mint test tokens
+Create position (collateral/debt pair chosen once, fixed for the position)
 
       ↓
 
@@ -627,17 +634,8 @@ Deposit collateral
 
       ↓
 
-Refresh oracle when required
-
-      ↓
-
-Generate browser-side ZK proof
-
-      ↓
-
-Borrow
-
-      ↓
+Borrow  ← each action: browser-side ZK proof over a fresh signed
+      ↓    price snapshot, verified in the same transaction
 
 Repay
 
@@ -645,6 +643,9 @@ Repay
 
 Withdraw
 ```
+
+Minting test tokens and seeding liquidity are developer tools in a visually
+separate testnet-tools section, not part of the user flow.
 
 The demo also includes:
 
@@ -661,6 +662,14 @@ See `demo/README.md` for the detailed walkthrough.
 `vDBT` is the test debt token.
 
 Both are **test/demo assets only** and are not production assets.
+
+`WETH` (18 decimals) and `USDC` (6 decimals) are the intended production
+assets, wired in code to the Stork ETHUSD/USDCUSD feeds; they activate with
+the next Testnet deployment (the current deployment does not enable them).
+Mixed-decimal accounting is value-based and decimal-aware — 18-dec-normalized
+prices make the ZK comparisons exact across 6/18 decimals, and the borrow cap
+is a dollar-value cap, all covered by the local six-pair lifecycle suite.
+`ZEN` remains locked (no ZEN/USD Stork feed).
 
 ---
 
@@ -839,15 +848,13 @@ The protocol has not undergone an external security audit.
 
 A production deployment requires additional security review and audit work.
 
-### Immutable Testnet Deployment
+### Testnet Deployment Model
 
-The current testnet deployment uses immutable verifier addresses and a non-upgradeable protocol deployment.
+The **currently live** testnet deployment uses immutable verifier addresses and a non-upgradeable protocol contract (the fixed M1 deployment recorded in `deployments/horizenTestnet.json`).
 
-This is intentional for the current M1 prototype and provides a fixed, verifiable deployment for testnet evidence.
+The **repository code** has since been converted to a UUPS upgradeable architecture (ERC-1967 proxy, `Initializable`/`Ownable2StepUpgradeable`/`PausableUpgradeable`/`ReentrancyGuardUpgradeable`/`UUPSUpgradeable`, owner-only `_authorizeUpgrade`, upgrade tests) **awaiting the next Testnet deployment**. Until that deployment happens, any on-chain change still requires a fresh deployment.
 
-Future production architecture will be designed separately, including the upgrade, governance, emergency, and recovery mechanisms required for production operation.
-
-Circuit or verifier changes to the current deployment require a new deployment.
+Production upgrade governance, emergency process, and recovery mechanics remain open M2 work.
 
 ### Testnet Oracle
 

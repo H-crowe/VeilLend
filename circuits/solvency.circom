@@ -68,9 +68,9 @@ template Solvency() {
     component debtBits = Num2Bits(128);
     debtBits.in <== debt;
 
-    component rcCollPrice = RangeCheck(64);
+    component rcCollPrice = RangeCheck(104);
     rcCollPrice.in <== collateralPrice;
-    component rcDebtPrice = RangeCheck(64);
+    component rcDebtPrice = RangeCheck(104);
     rcDebtPrice.in <== debtPrice;
     component rcLtv = RangeCheck(14);
     rcLtv.in <== maxLtvBps;
@@ -106,7 +106,7 @@ template Solvency() {
     signal rhs;
     rhs <== debtVal * maxLtvBps;
 
-    component solvent = GreaterEqThan(207);
+    component solvent = GreaterEqThan(223);
     solvent.in[0] <== lhs;
     solvent.in[1] <== rhs;
     solvent.out === 1;

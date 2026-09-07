@@ -14,7 +14,7 @@
  * Requires ZK artifacts (npm run zk:build) and HORIZEN_TESTNET_PRIVATE_KEY
  * in .env funded with testnet ETH.
  */
-import { ethers } from "hardhat";
+import { ethers, upgrades } from "hardhat";
 import * as fs from "fs";
 import * as path from "path";
 import { requireZkArtifacts } from "./prove";
@@ -105,20 +105,36 @@ async function main() {
   console.log("LiquidationVerifier    :", addresses.liquidationVerifier);
 
   // --- Protocol ---
-  const veilFactory = await ethers.getContractFactory("VeilLend");
-  const veil = await deployLogged(
-    "VeilLend",
-    veilFactory.deploy(
+  // UUPS proxy deployment (via the OpenZeppelin upgrades plugin): the proxy
+  // address is the stable public entry point; the implementation holds the
+  // logic and is upgradeable by the owner (owner-only _authorizeUpgrade).
+  const veilImplFactory = await ethers.getContractFactory("VeilLend");
+  const veilImpl = await deployLogged("VeilLend implementation", veilImplFactory.deploy());
+  const veilProxy = await upgrades.deployProxy(
+    veilImplFactory,
+    [
       deployer.address,
       addresses.stateTransitionVerifier,
       addresses.solvencyVerifier,
       addresses.riskTransitionVerifier,
       addresses.liquidationVerifier,
       addresses.mockPriceOracle
-    )
+    ],
+    { kind: "uups" }
   );
-  addresses.veilLend = await veil.getAddress();
-  console.log("VeilLend               :", addresses.veilLend);
+  await veilProxy.waitForDeployment();
+  const veilProxyAddress = await veilProxy.getAddress();
+  const deployTx = veilProxy.deploymentTransaction();
+  deployLog.push({
+    label: "VeilLend (UUPS proxy)",
+    address: veilProxyAddress,
+    txHash: deployTx?.hash,
+    block: String((await deployTx?.wait())?.blockNumber),
+    gasUsed: (await deployTx?.wait())?.gasUsed.toString()
+  });
+  const veil = await ethers.getContractAt("VeilLend", veilProxyAddress);
+  addresses.veilLend = veilProxyAddress;
+  console.log("VeilLend (UUPS proxy)  :", veilProxyAddress);
 
   // --- Configuration ---
   console.log("\nConfiguring protocol…");

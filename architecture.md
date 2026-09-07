@@ -307,7 +307,7 @@ of the commitment/nullifier constructions — no duplication):
 | Circuit | Constraints | Public signals (exact order) |
 |---|---|---|
 | state_transition (deposit=1, repay=2) | 7875 | positionId, oldCommitment, newCommitment, nullifier, actionId, newSequence, currentIndexLo, currentIndexHi, publicAmount |
-| solvency | ~2.7k | positionId, positionCommitment, collateralPrice, debtPrice, maxLtvBps |
+| solvency | ~2.8k | positionId, positionCommitment, collateralPrice, debtPrice, maxLtvBps |
 | risk_transition (borrow=3, withdraw=4) | ~7.5k | the 9 transition fields + collateralPrice, debtPrice, maxLtvBps, **recipient** |
 | liquidation | ~3.5k | collateralOut, debtOut, positionId, positionCommitment, collateralPrice, debtPrice, liquidationThresholdBps, **recipient** |
 
@@ -320,6 +320,14 @@ mempool proofs cannot redirect value. Deposit/repay (state_transition) move
 value INBOUND from the submitter and are deliberately unchanged (Phase 2
 byte-compatible interface). Consequence: payouts always go to the
 transaction sender; meta-relaying for smart-contract wallets is future work.
+
+**Price normalization (multi-decimals support):** the contract feeds the
+circuits 18-dec-NORMALIZED prices — `normalized = raw oracle price ×
+10^(18 − decimals)` — so `colAtomic × normalizedPrice` reduces to the
+position's dollar value for ANY supported token decimals (6..18, enforced at
+enable time). The circuits' price range checks were widened accordingly
+(2^64 → 2^104) and the value comparators to 223 bits. For 18-decimals tokens
+the normalization is the identity (backward compatible).
 
 Key relations (cross-multiplied, integer-exact — full fixed-point convention
 in docs/solvency-model.md):
@@ -348,8 +356,11 @@ tables). Summary:
   withdraw) and liquidation; accrual, position creation and views stay
   available. Only closePosition remains fail-closed-unimplemented
   (UnsupportedAction). No custody backdoor exists behind the pause.
-- Admin (`Ownable2Step`) manages parameters/assets/oracle/staleness/pause
-  only. No fund-moving function exists (ABI whitelist test).
+- Admin (`Ownable2StepUpgradeable`) manages parameters/assets/oracle/
+  staleness/pause only. No fund-moving function exists (ABI whitelist test).
+- UUPS upgrade authority is owner-only (`_authorizeUpgrade`); the upgrade
+  swaps implementation code and adds no fund-moving capability (enforced by
+  the ABI-whitelist and upgrade tests).
 - Oracle boundary `getFreshPrice` enforces freshness; borrow, withdraw and
   liquidate gate on it on-chain (stale/absent prices revert).
 
@@ -385,8 +396,10 @@ multi-party ceremony is required before any mainnet-style deployment
 7. **Horizen Testnet deployment (current).** Standard EVM bytecode
    (`evmVersion: paris`) kept the stack deployable across Horizen
    environments; the full protocol is deployed and Blockscout-verified (see
-   README / deployments) — but the deployment is immutable: any circuit
-   change requires a new deployment.
+   README / deployments). The repository code has been converted to the UUPS
+   upgradeable pattern (owner-only `_authorizeUpgrade`) for the NEXT
+   deployment; the currently deployed contract remains fixed/non-proxy, so
+   any on-chain change until then still requires a new deployment.
 
 ---
 
@@ -409,9 +422,10 @@ VeilLend/
 │   ├── risk_transition.circom    # borrow / withdraw with post-action solvency
 │   └── liquidation.circom        # eligibility + settlement outputs
 ├── contracts/
-│   ├── VeilLend.sol              # protocol surface + 4 Groth16 verifier integrations
+│   ├── VeilLend.sol              # protocol surface + 4 Groth16 verifier integrations (UUPS)
+│   ├── oracles/                  # IPriceOracle, StorkPriceOracle, IStork, StorkStructs
 │   ├── zk/                       # generated, real verifiers (4)
-│   └── test/                     # TokenMock, MockPriceOracle (test-only)
+│   └── test/                     # TokenMock, MockPriceOracle, MockStorkOracle (test-only)
 ├── scripts/
 │   ├── prove.ts                  # prover library + zk:build + local demo
 │   ├── deploy.ts                 # Horizen Testnet deployment (full stack)

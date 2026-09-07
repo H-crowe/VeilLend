@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAccount, useConnect, usePublicClient, useSwitchChain, useWalletClient } from "wagmi";
 import { getWalletClient as getWagmiWalletClient } from "@wagmi/core";
-import type { Address } from "viem";
+import { encodeFunctionData, getAddress, type Address } from "viem";
 import { horizenTestnet, explorerTx } from "../lib/chains";
-import { ADDRESSES } from "../lib/contracts/addresses";
+import { ADDRESSES, ASSETS } from "../lib/contracts/addresses";
 import { veilLendAbi, tokenAbi, oracleAbi } from "../lib/contracts/abis";
 import {
   ACTION_BORROW, ACTION_DEPOSIT, ACTION_WITHDRAW, ceilDiv, randomSecret,
@@ -171,11 +171,40 @@ export function useVeilLend() {
 
   useEffect(() => { void refreshOnChain(); }, [address, selectedId, tx.status, refreshOnChain]);
 
-  const oraclePrices = useCallback(async () => {
+  /**
+   * Wallet balances for the ASSETS registry (vCOL/vDBT/WETH/USDC; ZEN has no
+   * address). Read-only display alongside the active pair — WETH/USDC feed
+   * in via Stork once the Stork-backed deployment activates them.
+   */
+  const [assetBalances, setAssetBalances] = useState<Record<string, bigint>>({});
+  const refreshAssetBalances = useCallback(async () => {
+    if (!publicClient || !address) { setAssetBalances({}); return; }
+    const entries = await Promise.all(ASSETS.filter((a) => a.address !== "").map(async (a) => {
+      try {
+        const bal = (await publicClient.readContract({
+          address: a.address as Address, abi: tokenAbi,
+          functionName: "balanceOf", args: [address],
+        })) as bigint;
+        return [a.symbol, bal] as const;
+      } catch {
+        return [a.symbol, 0n] as const; // contract absent/none there — show 0
+      }
+    }));
+    setAssetBalances(Object.fromEntries(entries));
+  }, [publicClient, address]);
+  useEffect(() => { void refreshAssetBalances(); }, [refreshAssetBalances, tx.status]);
+
+  const oraclePrices = useCallback(async (collateralAddr?: string, debtAddr?: string) => {
     if (!publicClient) throw new Error("no RPC");
+    // IPriceOracle is the single source of truth (IPriceOracle.getPrice):
+    // StorkPriceOracle adapter when configured, mock oracle for the legacy
+    // testnet deployment until the Stork-backed contract lands.
+    const oracleAddr = (ADDRESSES.storkPriceOracle || ADDRESSES.mockPriceOracle) as Address;
+    const colAsset = (collateralAddr ?? ADDRESSES.collateralToken) as Address;
+    const debtAsset = (debtAddr ?? ADDRESSES.debtToken) as Address;
     const [col, debt] = (await Promise.all([
-      publicClient.readContract({ address: ADDRESSES.mockPriceOracle as Address, abi: oracleAbi, functionName: "getPrice", args: [ADDRESSES.collateralToken as Address] }),
-      publicClient.readContract({ address: ADDRESSES.mockPriceOracle as Address, abi: oracleAbi, functionName: "getPrice", args: [ADDRESSES.debtToken as Address] }),
+      publicClient.readContract({ address: oracleAddr, abi: oracleAbi, functionName: "getPrice", args: [colAsset] }),
+      publicClient.readContract({ address: oracleAddr, abi: oracleAbi, functionName: "getPrice", args: [debtAsset] }),
     ])) as [readonly [bigint, bigint], readonly [bigint, bigint]];
     return { collateralPrice: col[0], debtPrice: debt[0] };
   }, [publicClient]);
@@ -204,26 +233,91 @@ export function useVeilLend() {
    * StalePrice. Detect it here first so the user gets an actionable message
    * instead of a reverted transaction.
    */
-  const ensureFreshPrices = useCallback(async () => {
+  const ensureFreshPrices = useCallback(async (collateralAddr?: string, debtAddr?: string) => {
     if (!publicClient) throw new Error("no RPC");
+    const oracleAddr = (ADDRESSES.storkPriceOracle || ADDRESSES.mockPriceOracle) as Address;
+    const colAsset = (collateralAddr ?? ADDRESSES.collateralToken) as Address;
+    const debtAsset = (debtAddr ?? ADDRESSES.debtToken) as Address;
     const [block, staleness, col, debt] = (await Promise.all([
       publicClient.getBlock(),
       publicClient.readContract({ address: ADDRESSES.veilLend as Address, abi: veilLendAbi, functionName: "maxPriceStaleness" }) as Promise<bigint>,
-      publicClient.readContract({ address: ADDRESSES.mockPriceOracle as Address, abi: oracleAbi, functionName: "getPrice", args: [ADDRESSES.collateralToken as Address] }) as Promise<readonly [bigint, bigint]>,
-      publicClient.readContract({ address: ADDRESSES.mockPriceOracle as Address, abi: oracleAbi, functionName: "getPrice", args: [ADDRESSES.debtToken as Address] }) as Promise<readonly [bigint, bigint]>,
+      publicClient.readContract({ address: oracleAddr, abi: oracleAbi, functionName: "getPrice", args: [colAsset] }) as Promise<readonly [bigint, bigint]>,
+      publicClient.readContract({ address: oracleAddr, abi: oracleAbi, functionName: "getPrice", args: [debtAsset] }) as Promise<readonly [bigint, bigint]>,
     ]));
     const limit = Number(staleness);
     const stale = (u: bigint) => Number(block.timestamp) - Number(u) > limit;
     if (stale(col[1]) || stale(debt[1])) {
-      throw new Error("Oracle prices are stale (mock testnet oracle, 1h freshness limit). Use 'Refresh oracle prices' in Testnet assets, then retry.");
+      throw new Error(ADDRESSES.storkPriceOracle
+        ? "Oracle prices are stale — use 'Push fresh oracle prices' to relay a Stork update, then retry."
+        : "Oracle prices are stale (mock testnet oracle, 1h freshness limit). Use 'Refresh oracle prices' in Testnet assets, then retry.");
     }
   }, [publicClient]);
 
-  /** Refreshes the mock testnet oracle prices (owner-only on-chain op). */
+  /**
+   * Price refresh, oracle-aware:
+   * - Stork path (production): fetch publisher-signed updates from the Stork
+   *   API and relay them through VeilLend.pushOracleUpdate (forwards to the
+   *   StorkPriceOracle adapter → Stork with the required fee). Permissionless.
+   * - Mock path (legacy testnet deployment): owner-only setPrice calls.
+   */
   const refreshOraclePrices = useCallback(async () => {
     if (!isConnected || !address) throw new Error("wallet not connected");
     const walletClient = await getWallet();
     setTx({ status: "wallet" });
+    if (ADDRESSES.storkPriceOracle) {
+      const token = process.env.NEXT_PUBLIC_STORK_ACCESS_TOKEN;
+      if (!token) throw new Error("Stork relay is not configured (NEXT_PUBLIC_STORK_ACCESS_TOKEN missing) — obtain a Stork API credential to push fresh signed updates");
+      const res = await fetch(`https://api.stork.network/v1/observations?assets=ETHUSD,USDCUSD`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error(`Stork API error ${res.status} — cannot fetch signed updates`);
+      const body = (await res.json()) as { data?: Record<string, { temporal_numeric_value: { timestamp_ns: string; quantized_value: string }; publisher_merkle_root: string; value_compute_alg_hash: string; r: string; s: string; v: number }> };
+      if (!body.data) throw new Error("Stork API returned no signed updates");
+      const feedByAsset: Record<string, `0x${string}`> = {
+        ETHUSD: "0x59102b37de83bdda9f38ac8254e596f0d9ac61d2035c07936675e87342817160",
+        USDCUSD: "0x7416a56f222e196d0487dce8a1a8003936862e7a15092a91898d69fa8bce290c",
+      };
+      const updates = Object.entries(body.data).map(([asset, o]) => ({
+        temporalNumericValue: {
+          timestampNs: BigInt(o.temporal_numeric_value.timestamp_ns),
+          quantizedValue: BigInt(o.temporal_numeric_value.quantized_value),
+        },
+        id: feedByAsset[asset],
+        publisherMerkleRoot: o.publisher_merkle_root as `0x${string}`,
+        valueComputeAlgHash: o.value_compute_alg_hash as `0x${string}`,
+        r: o.r as `0x${string}`,
+        s: o.s as `0x${string}`,
+        v: o.v,
+      }));
+      // VeilLend.pushOracleUpdate forwards raw calldata to the IPriceOracle;
+      // encode the adapter's pushStorkUpdate(updates) call as those bytes.
+      const storkAdapterAbi = [{
+        name: "pushStorkUpdate", type: "function", stateMutability: "payable",
+        inputs: [{
+          name: "updates", type: "tuple[]", components: [
+            { name: "temporalNumericValue", type: "tuple", components: [
+              { name: "timestampNs", type: "uint64" }, { name: "quantizedValue", type: "int192" }] },
+            { name: "id", type: "bytes32" },
+            { name: "publisherMerkleRoot", type: "bytes32" },
+            { name: "valueComputeAlgHash", type: "bytes32" },
+            { name: "r", type: "bytes32" }, { name: "s", type: "bytes32" }, { name: "v", type: "uint8" },
+          ] }],
+        outputs: [],
+      }] as const;
+      const oracleUpdateData = encodeFunctionData({ abi: storkAdapterAbi, functionName: "pushStorkUpdate", args: [updates as never] });
+      // Stork fee: singleUpdateFeeInWei (1 wei) per update in the batch
+      const fee = (await publicClient!.readContract({ address: ADDRESSES.storkOracle as Address, abi: [{ name: "singleUpdateFeeInWei", type: "function", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] }] as const, functionName: "singleUpdateFeeInWei" })) as bigint;
+      const hash = await walletClient.writeContract({
+        address: ADDRESSES.veilLend as Address, abi: veilLendAbi,
+        functionName: "pushOracleUpdate", args: [oracleUpdateData],
+        value: fee * BigInt(updates.length),
+      });
+      setTx((t) => ({ ...t, status: "confirming", txHash: hash }));
+      await publicClient!.waitForTransactionReceipt({ hash });
+      setTx({ status: "confirmed", txHash: hash, explorerUrl: explorerTx(hash), proofVerified: false });
+      return;
+    }
+    // Legacy mock-oracle path (current testnet deployment)
     const { collateralPrice, debtPrice } = await oraclePrices();
     const hash = await walletClient.writeContract({ address: ADDRESSES.mockPriceOracle as Address, abi: oracleAbi, functionName: "setPrice", args: [ADDRESSES.collateralToken as Address, collateralPrice] });
     setTx((t) => ({ ...t, status: "confirming", txHash: hash }));
@@ -294,23 +388,29 @@ export function useVeilLend() {
     return { hash, block: Number(rec.blockNumber), gasUsed: rec.gasUsed.toString() };
   }, [publicClient]);
 
-  const runAction = useCallback(async (kind: ActionKind, amt: bigint | null) => {
+  const runAction = useCallback(async (kind: ActionKind, amt: bigint | null, pair?: { collateral: string; debt: string }) => {
     if (!isConnected || !address || !publicClient) throw new Error("wallet not connected");
     const walletClient = await getWallet();
+    // Asset pair for this action. `create` uses the UI-selected pair; all
+    // other actions derive the pair from the position's own private state
+    // (assets are fixed at position creation), so a WETH/USDC position uses
+    // WETH/USDC prices and indices regardless of the dropdowns.
+    const collateralAddr = kind === "create" && pair ? pair.collateral : (selectedState ? getAddress("0x" + selectedState.collateralAsset.toString(16).padStart(40, "0")) : ADDRESSES.collateralToken);
+    const debtAddr = kind === "create" && pair ? pair.debt : (selectedState ? getAddress("0x" + selectedState.debtAsset.toString(16).padStart(40, "0")) : ADDRESSES.debtToken);
     setTx({ status: "preparing" });
     try {
       // ---------- create ----------
       if (kind === "create") {
         const nextId = (await publicClient.readContract({ address: ADDRESSES.veilLend as Address, abi: veilLendAbi, functionName: "nextPositionId" })) as bigint;
         const positionId = nextId + 1n;
-        const currentIndex = (await publicClient.readContract({ address: ADDRESSES.veilLend as Address, abi: veilLendAbi, functionName: "currentDebtIndex", args: [ADDRESSES.debtToken as Address] })) as bigint;
-        const st = makeInitialState({ positionId, collateralAsset: BigInt(ADDRESSES.collateralToken), debtAsset: BigInt(ADDRESSES.debtToken), currentIndex });
+        const currentIndex = (await publicClient.readContract({ address: ADDRESSES.veilLend as Address, abi: veilLendAbi, functionName: "currentDebtIndex", args: [debtAddr as Address] })) as bigint;
+        const st = makeInitialState({ positionId, collateralAsset: BigInt(collateralAddr), debtAsset: BigInt(debtAddr), currentIndex });
         const c0 = await computeCommitment(st);
         setTx((t) => ({ ...t, status: "submitting" }));
         setTx((t) => ({ ...t, status: "wallet" }));
         const hash = await walletClient.writeContract({
           address: ADDRESSES.veilLend as Address, abi: veilLendAbi, functionName: "createPosition",
-          args: [ADDRESSES.collateralToken as Address, ADDRESSES.debtToken as Address, bytes32(c0)],
+          args: [collateralAddr as Address, debtAddr as Address, bytes32(c0)],
         });
         setTx((t) => ({ ...t, status: "confirming", txHash: hash }));
         const rec = await publicClient.waitForTransactionReceipt({ hash });
@@ -341,7 +441,7 @@ export function useVeilLend() {
       const positionId = BigInt(selectedIdStr);
       const st = selectedState;
       if (!st) throw new Error("The private state for this position is not in this browser");
-      const currentIndex = (await publicClient.readContract({ address: ADDRESSES.veilLend as Address, abi: veilLendAbi, functionName: "currentDebtIndex", args: [ADDRESSES.debtToken as Address] })) as bigint;
+      const currentIndex = (await publicClient.readContract({ address: ADDRESSES.veilLend as Address, abi: veilLendAbi, functionName: "currentDebtIndex", args: [debtAddr as Address] })) as bigint;
       const newSalt = randomSecret();
 
       // ---------- deposit / repay (state_transition circuit) ----------
@@ -363,8 +463,8 @@ export function useVeilLend() {
       if (kind === "borrow" || kind === "withdraw") {
         const amount = amt ?? 0n;
         if (amount === 0n) throw new Error("Enter an amount");
-        await ensureFreshPrices();
-        const prices = await oraclePrices();
+        await ensureFreshPrices(collateralAddr, debtAddr);
+        const prices = await oraclePrices(collateralAddr, debtAddr);
         // Pre-flight the post-action solvency rule the deployed circuit
         // enforces, so an unprovable action fails with a precise message
         // before any proving or wallet interaction. (The withdraw-only
@@ -396,8 +496,8 @@ export function useVeilLend() {
 
       // ---------- liquidate (liquidation circuit, self-liquidation) ----------
       if (kind === "liquidate") {
-        await ensureFreshPrices();
-        const prices = await oraclePrices();
+        await ensureFreshPrices(collateralAddr, debtAddr);
+        const prices = await oraclePrices(collateralAddr, debtAddr);
         const params: LiquidationParams = { collateralPrice: prices.collateralPrice, debtPrice: prices.debtPrice, liquidationThresholdBps: 8500n };
         if (!isLiquidatable(st, params)) throw new Error("Position is not undercollateralized at current oracle prices");
         const w = await buildLiquidationWitness(st, params, BigInt(address));
@@ -469,7 +569,7 @@ export function useVeilLend() {
     snarkReady, positions, selectedId, setSelectedId: selectPosition, selectedState,
     onChain, refreshOnChain, oraclePrices,
     runAction, mintTestTokens, seedLiquidity, refreshOraclePrices, isEligible,
-    tx, setTx, RISK_PARAMS,
+    tx, setTx, RISK_PARAMS, ASSETS, assetBalances, refreshAssetBalances,
   };
 }
 

@@ -52,14 +52,11 @@ async function deployFixture() {
   const solvencyVerifier = await (await ethers.getContractFactory("SolvencyVerifier")).deploy();
   const riskVerifier = await (await ethers.getContractFactory("RiskTransitionVerifier")).deploy();
   const liquidationVerifier = await (await ethers.getContractFactory("LiquidationVerifier")).deploy();
-  const veil = (await (await ethers.getContractFactory("VeilLend")).deploy(
-    owner.address,
-    await verifier.getAddress(),
-    await solvencyVerifier.getAddress(),
-    await riskVerifier.getAddress(),
-    await liquidationVerifier.getAddress(),
-    await oracle.getAddress()
-  )) as VeilLend;
+  const veil = ((await upgrades.deployProxy(
+            await ethers.getContractFactory("VeilLend"),
+            [owner.address, await verifier.getAddress(), await solvencyVerifier.getAddress(), await riskVerifier.getAddress(), await liquidationVerifier.getAddress(), await oracle.getAddress()],
+            { kind: "uups" },
+          ))) as VeilLend;
 
   await veil.connect(owner).enableCollateralAsset(await collateral.getAddress());
   await veil.connect(owner).enableDebtAsset(await debt.getAddress(), RATE);

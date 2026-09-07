@@ -220,6 +220,27 @@ Transform the M1 technical demonstration into an implementation that has undergo
 
 M2 is intentionally separate from M1: successful technical demonstration does not constitute a security audit.
 
+### M2 status (in progress — not complete)
+
+Work already done toward M2 (implemented and tested locally):
+
+* UUPS upgradeable architecture (ERC-1967 proxy, owner-only `_authorizeUpgrade`, upgrade safety tests);
+* emergency pause on-chain (`PausableUpgradeable`) and two-step ownership (`Ownable2StepUpgradeable`);
+* real Stork oracle integration behind the `IPriceOracle` boundary (adapter + same-tx signed-snapshot flow), pending deployment;
+* decimal-aware, value-based borrow cap and 18-dec normalized price convention;
+* earlier hardening fixes F1–F5 (unsupported-commitment extraction, parameter/oracle bounds, mempool proof-theft mitigation via recipient binding, decimal-aware cap);
+* existing fuzz and invariant test suites;
+* local E2E lifecycle suite covering all six supported asset pairs plus negative/security cases (`test/e2e-lifecycle.test.ts`, 14/14 passing; full suite 156/156).
+
+Still outstanding for M2:
+
+* external security audit;
+* finalized comprehensive threat model;
+* on-chain recovery/escape mechanism (recovery remains a client-side prototype);
+* expanded fuzz and invariant testing;
+* deeper access-control/administration hardening review;
+* the next Testnet deployment carrying the UUPS + Stork changes.
+
 ---
 
 ## 3.1 M2 Deliverables

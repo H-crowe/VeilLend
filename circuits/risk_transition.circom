@@ -28,8 +28,9 @@
 //   [6]  currentIndexLo      (currentIndex = lo + hi*2^120)
 //   [7]  currentIndexHi
 //   [8]  amount              (borrow amount or withdraw amount)
-//   [9]  collateralPrice     (1e8-scaled, < 2^64)
-//   [10] debtPrice           (1e8-scaled, < 2^64)
+//   [9]  collateralPrice     (1e8-scaled dollars per 1e18 atomic units —
+//                             18-dec-normalized; < 2^104)
+//   [10] debtPrice           (same convention, < 2^104)
 //   [11] maxLtvBps           (<= 10000)
 
 pragma circom 2.0.0;
@@ -75,9 +76,9 @@ template RiskTransition() {
     // ---- range checks on the public inputs
     component rcAmount = RangeCheck(128);
     rcAmount.in <== amount;
-    component rcCollPrice = RangeCheck(64);
+    component rcCollPrice = RangeCheck(104);
     rcCollPrice.in <== collateralPrice;
-    component rcDebtPrice = RangeCheck(64);
+    component rcDebtPrice = RangeCheck(104);
     rcDebtPrice.in <== debtPrice;
     component rcLtv = RangeCheck(14);
     rcLtv.in <== maxLtvBps;
@@ -185,7 +186,7 @@ template RiskTransition() {
     lhs <== colVal * 10000;
     signal rhs;
     rhs <== debtVal * maxLtvBps;
-    component solvent = GreaterEqThan(207);
+    component solvent = GreaterEqThan(223);
     solvent.in[0] <== lhs;
     solvent.in[1] <== rhs;
     solvent.out === 1;

@@ -60,14 +60,11 @@ async function deployFixture() {
   const solvencyVerifier = await (await ethers.getContractFactory("SolvencyVerifier")).deploy();
   const riskVerifier = await (await ethers.getContractFactory("RiskTransitionVerifier")).deploy();
   const liquidationVerifier = await (await ethers.getContractFactory("LiquidationVerifier")).deploy();
-  const veil = (await (await ethers.getContractFactory("VeilLend")).deploy(
-    owner.address,
-    await verifier.getAddress(),
-    await solvencyVerifier.getAddress(),
-    await riskVerifier.getAddress(),
-    await liquidationVerifier.getAddress(),
-    await oracle.getAddress()
-  )) as VeilLend;
+  const veil = ((await upgrades.deployProxy(
+            await ethers.getContractFactory("VeilLend"),
+            [owner.address, await verifier.getAddress(), await solvencyVerifier.getAddress(), await riskVerifier.getAddress(), await liquidationVerifier.getAddress(), await oracle.getAddress()],
+            { kind: "uups" },
+          ))) as VeilLend;
 
   await veil.connect(owner).enableCollateralAsset(await collateral.getAddress());
   await veil.connect(owner).enableDebtAsset(await debt.getAddress(), RATE);
@@ -309,12 +306,12 @@ describe("risk_transition action gate — borrow/withdraw semantics (circuit fix
       controlSecret: BigInt(randHex()),
       salt: BigInt(randHex()),
     });
-    seedState.debt = 80n * WAD;
+    seedState.debt = 200n * WAD;
     await veil.createPosition(await collateral.getAddress(), await debt.getAddress(), bytes32(await computeCommitment(seedState)));
     const repT = await buildTransition({
       oldState: seedState,
       actionId: 2n,
-      amount: 80n * WAD,
+      amount: 200n * WAD,
       currentIndex: await veil.currentDebtIndex(await debt.getAddress()),
       newSalt: BigInt(randHex()),
     });
@@ -337,9 +334,10 @@ describe("risk_transition action gate — borrow/withdraw semantics (circuit fix
     );
 
     const { state } = await depositedPosition(veil, collateral, debt, user, 100n * WAD);
-    // 80e18: provable in-circuit (solvency limit 266.67e18), above the
-    // on-chain cap of supported * 75% = 75e18.
-    const b = await borrowWitness(veil, debt, state, 80n * WAD, BigInt(user.address));
+    // 160e18 vDBT = $160 of debt against $200 of collateral value — above the
+    // new price-scaled dollar cap (maxLtvBps/10000 × supported value = $150),
+    // but provable in-circuit (ZK solvency limit 266.67e18).
+    const b = await borrowWitness(veil, debt, state, 160n * WAD, BigInt(user.address));
     const { callArgs, publicSignals } = await generateProof(b.inputs, "risk_transition");
     const inputs = {
       positionId: publicSignals[0],

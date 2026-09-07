@@ -105,7 +105,7 @@ C2 = 197771297968216673016912965233884286485474023012893602948639453566512955047
 
 ## 4. Local regression status
 
-- **106/106 tests passing at the time of this evidence run** (the suite has since grown to 120 with the liquidation coverage, security-hardening tests and the risk-gate regression suite) (unit, circuit-level, solvency, risk,
+- **106/106 tests passing at the time of this evidence run** (the suite has since grown to 156 with the liquidation coverage, security-hardening tests, the risk-gate regression suite, the UUPS/upgrade and Stork-integration tests, and the six-pair E2E lifecycle suite) (unit, circuit-level, solvency, risk,
   liquidation, supported-collateral, recipient-binding adversarial A–I,
   seeded fuzz/invariant harness) — re-run after the on-chain test.
 - Clean Solidity build (19 files, zero warnings, `evmVersion: paris`).

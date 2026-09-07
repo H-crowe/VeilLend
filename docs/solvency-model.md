@@ -44,6 +44,19 @@ only passes the values as public inputs to the Groth16 verifier), so
 circuit/Solidity consistency reduces to passing identical integers, which
 the verification equation guarantees.
 
+### Multi-decimals normalization
+
+The contract passes 18-dec-NORMALIZED prices to the circuits:
+`normalized = raw oracle price × 10^(18 − decimals)` — dollars per 1e18
+atomic units, 1e8-scaled. With this convention
+`colAtomic × normalizedPrice = position dollars × 1e26` for ANY token
+decimals, so the solvency/eligibility inequalities compare pure dollar
+values across mixed-decimals collateral/debt pairs exactly. Supported
+decimals range: 6..18 (enforced at asset-enable time; the floor keeps the
+normalized price inside the circuits' 104-bit range, and the ceiling keeps
+it integer-representable). For 18-decimals tokens the normalization is the
+identity, so all pre-existing flows are unchanged.
+
 ## 3. Public / private inputs
 
 ### solvency.circom — public (5, exact order)
@@ -145,11 +158,15 @@ prices.
 - Risk parameters (`maxLtvBps`, `liquidationThresholdBps`) are admin-set
   per debt asset; the circuit constrains them ≤ 10000 but the values are
   governance inputs.
-- Economic ranges: amounts must stay < 2^128 and prices < 2^64 for proofs
-  to exist; index growth is bounded implicitly by the same ranges.
+- Economic ranges: amounts must stay < 2^128; the oracle prices that enter
+  the circuits are 18-dec-normalized (raw per-token price × 10^(18−decimals))
+  and bounded < 2^104, which keeps the value terms far below the 253-bit
+  field; index growth is bounded implicitly by the same ranges.
 - Proof generation currently requires the position's private witness: only
   the control-secret holder can prove solvency/eligibility for their own
   position today. Decentralized liquidation therefore needs the witness-
   disclosure mechanisms planned for a later phase (see liquidation-model.md).
-- Trusted setup is a deterministic single contribution (PoC), circuits are
-  unaudited, and nothing is deployed to Horizen.
+- Trusted setup is a deterministic single contribution (PoC) and the
+  circuits are unaudited. At the time this model was written nothing was
+  deployed to Horizen; the stack has since been deployed to the Horizen
+  Testnet and Blockscout-verified (see README / deployments).
