@@ -84,7 +84,10 @@ A liquidator can prove that a position is undercollateralized without learning t
 
 ### Non-Custodial Architecture
 
-The current deployment does not provide an administrative withdrawal backdoor or upgrade key.
+The protocol provides **no administrative withdrawal path and no custody
+backdoor**. The current UUPS deployment has **owner-only upgrade authority**
+(`_authorizeUpgrade` is restricted to the contract owner) — no multisig or
+timelock governance yet, which is tracked as M2 hardening work.
 
 Private positions are controlled by their cryptographic control secret, which is bound into the commitment and nullifier construction.
 
@@ -367,13 +370,17 @@ Production economics can later introduce utilization-derived rates once the requ
 
 ### Current Testnet Oracle
 
-The current Horizen testnet deployment uses an owner-managed:
+The current Horizen testnet deployment prices assets through an owner-gated:
 
 ```text
-MockPriceOracle
+OwnerMockPriceOracle
 ```
 
-It exists for development and E2E demonstration.
+fed by the Testnet/Demo Base-Chainlink relay (Base Mainnet Chainlink
+ETH/USD + USDC/USD → `relay/base-price-relay.mjs` → Horizen). It exists for
+development and E2E demonstration and is **TESTNET/DEMO ONLY** — the
+production oracle path is the deployed Stork adapter (see Production
+Direction below).
 
 The oracle includes:
 
@@ -476,18 +483,28 @@ Planned integrations include:
 
 **Chain ID:** `2651420`
 
-### Current Deployment
+### Current Deployment (UUPS / ERC-1967)
 
-| Contract                                | Address                                       |
-| --------------------------------------- | --------------------------------------------- |
-| **VeilLend**                            | `0xeCB439fbE792Bec4E005f1809E6DCF4FB37d4787`  |
-| **RiskTransitionVerifier**              | `0x65dcBf151d10E63a43b972c41C760E983154Cefb`  |
-| **Groth16Verifier — State Transitions** | `0x0D96E5a05d11c0839037488332CAd29E6Ef6686C`  |
-| **SolvencyVerifier**                    | `0xD33ce96e9A6AF2c8f5E7f73d5214eDf0c9eff24F`  |
-| **LiquidationVerifier**                 | `0x4bf85D6D5f3A730280D707dB0D2d063940A80869`  |
-| **MockPriceOracle**                     | `0xDA4CAA96D6fF78Af30A3955b5310BE9258d57Bc2`  |
-| **vCOL**                                | `0x281FbbeD6f2DEA61c86191EA92f2B9B9D2D66a3c`  |
-| **vDBT**                                | `0xe27c05934Ad4046d72766808b30F0514e978f612`  |
+| Contract | Address |
+| --- | --- |
+| **VeilLend (UUPS proxy)** | `0xc1e2cDADBf14717DfEE7ffA23EAf2b21e6004a5B` |
+| VeilLend implementation | `0x353EcfaFa07a60f1Ed473ed4cE3F1c2624fF7aa5` |
+| StorkPriceOracle adapter (production path) | `0xa2c0a60B4A360e88cA5f90860A3B75A3DDfED33D` → Stork `0xacC0a0cF13571d30B4b8637996F5D6D774d4fd62` |
+| OwnerMockPriceOracle (Testnet/Demo oracle) | `0x024CF745c737B74f8BCc84d1C73687853310b715` |
+| Groth16Verifier — State Transitions | `0xbdF87292EAAd22dB17C5ADCA3eAC33Db891ab3f1` |
+| SolvencyVerifier | `0x18C104Dc76A6F4Dad6cC1f2E467D9EbC10162676` |
+| RiskTransitionVerifier | `0xB54B51664215ED17F238D52EDD8d5E549D136b26` |
+| LiquidationVerifier | `0xe33b96CC86D3c68119312b9B2274F1e734211daa` |
+| vCOL (test mock) | `0xb5a5b0f1083965B9d92dCd94E5BCdDb868BfcFCE` |
+| vDBT (test mock) | `0xe48a8EC02EB14BB52Fe363D3B2A32e264d3B5D7f` |
+| WETH | `0x4200000000000000000000000000000000000006` |
+| USDC | `0x01c7AEb2A0428b4159c0E333712f40e127aF639E` |
+
+`ZEN` is not enabled (locked — no ZEN/USD Stork feed).
+
+The Stork adapter is configured with the official registry feeds:
+**WETH → `WETHUSD`** (`0x8afba5f1…82b8`), **USDC → `USDCUSD`**
+(`0x7416a56f…290c`).
 
 **RPC:** `https://horizen-testnet.rpc.caldera.xyz/http`
 
@@ -495,13 +512,28 @@ Planned integrations include:
 
 **Hub / Faucet:** `https://hub-testnet.horizen.io/`
 
-The current VeilLend deployment uses the repaired `RiskTransitionVerifier` following a circuit gate correction. The state-transition, solvency, and liquidation verifiers were reused unchanged.
+The complete machine-readable deployment record for the current deployment:
 
-The complete machine-readable deployment record is available in:
+`deployments/horizenTestnet-uups.json`
 
-`deployments/horizenTestnet.json`
+### Historical M1 Deployment (immutable — superseded)
 
-The file also preserves the superseded first deployment for historical evidence.
+| Contract | Address |
+| --- | --- |
+| VeilLend (M1, non-proxy) | `0xeCB439fbE792Bec4E005f1809E6DCF4FB37d4787` |
+| RiskTransitionVerifier (repaired) | `0x65dcBf151d10E63a43b972c41C760E983154Cefb` |
+| Groth16Verifier — State Transitions | `0x0D96E5a05d11c0839037488332CAd29E6Ef6686C` |
+| SolvencyVerifier | `0xD33ce96e9A6AF2c8f5E7f73d5214eDf0c9eff24F` |
+| LiquidationVerifier | `0x4bf85D6D5f3A730280D707dB0D2d063940A80869` |
+| MockPriceOracle | `0xDA4CAA96D6fF78Af30A3955b5310BE9258d57Bc2` |
+| vCOL / vDBT | `0x281FbbeD6f2DEA61c86191EA92f2B9B9D2D66a3c` / `0xe27c05934Ad4046d72766808b30F0514e978f612` |
+
+The M1 deployment above is a **historical, immutable, non-proxy
+deployment**: it was never upgraded, and the UUPS proxy is a **separate,
+newer deployment** that is the current official Testnet contract. M1's
+record is preserved in `deployments/horizenTestnet.json` (which also
+preserves the first superseded deployment for historical evidence); the
+M1-era proof/liquidation evidence documents are marked historical.
 
 ---
 
@@ -666,7 +698,17 @@ See `.env.example` for the expected configuration.
 
 ## Built vs. Future
 
-### Already Built
+### Already Built (oracle-relevant additions)
+
+* Stork production oracle path implemented and deployed on Testnet:
+  `StorkPriceOracle` adapter wired to the real Stork push oracle with the
+  official **WETHUSD / USDCUSD** feeds and permissionless
+  `pushOracleUpdate` (activation awaits Stork testnet publishing);
+* Testnet/Demo price relay: Base Chainlink → owner-gated
+  `OwnerMockPriceOracle` (**TESTNET/DEMO ONLY**, isolated in `relay/`);
+* UUPS upgradeable deployment (owner-only `_authorizeUpgrade`);
+* WETH (18) / USDC (6) enabled with decimal-normalized, value-based risk
+  accounting — a real WETH/USDC lifecycle executed on-chain.
 
 * Poseidon-based private state commitments;
 * Groth16 zero-knowledge proofs;
@@ -690,7 +732,8 @@ See `.env.example` for the expected configuration.
 ### Future Production Milestones
 
 * external security audit;
-* production Stork oracle integration;
+* Stork production activation/hardening (subscriber credentials/relaying on
+  Horizen testnet, then switching the live price path to Stork);
 * broader collateral support;
 * utilization-based interest-rate economics;
 * production incentives and reserve mechanics;
@@ -862,7 +905,7 @@ Working testnet prototype for Horizen S2: private position commitments, Groth16 
 
 The current release is a **testnet prototype** and has not undergone a production security audit.
 
-Production milestones include Stork oracle integration, broader collateral support, utilization-based interest economics, Base-originating ecosystem liquidity, deeper Horizen ecosystem integration, mainnet deployment, and additional security hardening.
+The Stork production oracle path is implemented, configured, and deployed on Testnet (WETHUSD/USDCUSD feeds); its live activation plus broader collateral support, utilization-based interest economics, Base-originating ecosystem liquidity, deeper Horizen ecosystem integration, mainnet deployment, and additional security hardening remain future milestone work.
 
 ---
 
