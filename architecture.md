@@ -396,14 +396,30 @@ multi-party ceremony is required before any mainnet-style deployment
 7. **Horizen Testnet deployment (current).** Standard EVM bytecode
    (`evmVersion: paris`) kept the stack deployable across Horizen
    environments; the full protocol is deployed and Blockscout-verified (see
-   README / deployments). The repository code has been converted to the UUPS
-   upgradeable pattern (owner-only `_authorizeUpgrade`) for the NEXT
-   deployment; the currently deployed contract remains fixed/non-proxy, so
-   any on-chain change until then still requires a new deployment.
+   README / deployments). The CURRENT official Testnet deployment is the UUPS
+   upgradeable deployment (ERC-1967 proxy `0xc1e2…4a5B`, owner-only
+   `_authorizeUpgrade`, `deployments/horizenTestnet-uups.json`). The M1
+   non-proxy deployment remains historical and was never upgraded. Testnet
+   demo pricing currently runs through an owner-gated oracle fed by an
+   isolated Base-Chainlink relay (testnet/demo only); the Stork adapter with
+   WETHUSD/USDCUSD feeds is deployed and is the intended production path.
 
 ---
 
-## 14. Next phase (beyond Phase 3)
+## 14. Historical framing note (written during Phase 3)
+
+> **This section is a historical framing written while Phase 3 was the next
+> unfinished phase.** Its content — the solvency/borrow/withdraw/liquidation
+> plan below — was subsequently implemented and is part of the current
+> architecture (§10b). The project's actual forward-looking plan now lives in
+> [`docs/milestones.md`](docs/milestones.md) (M1 CLOSED; M2 Security &
+> Production Hardening in progress) and
+> [`docs/roadmap.md`](docs/roadmap.md). Nothing in this section changes the
+> current state: the current Testnet deployment is the UUPS deployment
+> (§7.7), with the Stork adapter as the intended production oracle and a
+> Testnet/Demo-only Base-Chainlink relay (see
+> [`docs/oracle-model.md`](docs/oracle-model.md) §5) while Stork testnet
+> publishing is pending.
 
 **Phase 3 — Confidential Liquidation readiness:** solvency proof circuit
 (private collateral/debt vs public oracle prices + public threshold),
@@ -434,7 +450,8 @@ VeilLend/
 │   ├── proof-test.ts             # on-chain ZK proof integration test
 │   ├── liquidation-test.ts       # on-chain confidential liquidation test
 │   └── verify-network.ts         # read-only network/deployment precheck
-├── test/                         # unit / ZK / solvency / risk / risk-gate / adversarial / liquidation / fuzz
+├── relay/                        # TESTNET/DEMO ONLY: Base Chainlink -> Horizen OwnerMockPriceOracle relay (temporary; Stork is production)
+test/                         # unit / ZK / solvency / risk / risk-gate / adversarial / liquidation / fuzz
 ├── demo/                         # Next.js browser app (in-browser Groth16 proving)
 │   ├── app/                      # main page + /recovery-test + /sigtest
 │   ├── lib/                      # witness/poseidon/recovery/store/tx guard

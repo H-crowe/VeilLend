@@ -385,7 +385,15 @@ The testnet oracle is **not production infrastructure**.
 
 ### Production Direction
 
-The **Horizen Stork oracle** integration is implemented in the repository behind the same freshness and price-validation interface: a `StorkPriceOracle` adapter (`IPriceOracle` → Stork push oracle), official registry feed IDs for ETHUSD/USDCUSD, and a permissionless same-transaction flow (signed Stork snapshot relayed and consumed by the user's proof in one transaction via `pushOracleUpdate`). It is **not deployed yet** — the current testnet deployment still runs the mock oracle, and Stork's testnet feeds are not actively published.
+The **Horizen Stork oracle** is the intended PRODUCTION oracle integration and is implemented AND deployed on Horizen Testnet behind the same freshness and price-validation interface: a `StorkPriceOracle` adapter (`IPriceOracle` → real Stork push oracle at `0xacC0…d62`), official registry feed IDs — **WETH → `WETHUSD`** (`0x8afba5f1…82b8`), **USDC → `USDCUSD`** (`0x7416a56f…290c`) — and a permissionless same-transaction flow (signed Stork snapshot relayed and consumed by the user's proof in one transaction via `pushOracleUpdate`).
+
+Production price path (intended):
+
+```text
+Stork signed data  →  Stork on-chain update  →  VeilLend
+```
+
+Stork testnet feeds are not yet actively published (no subscriber relayer is running on Horizen testnet), so the CURRENT testnet deployment temporarily points at a separate **Testnet/Demo price path** (see "Testnet / Demo Price Source" below). These are two distinct paths: Stork remains the production design; the demo path is temporary infrastructure, not a production oracle and not a Stork replacement.
 
 This keeps the privacy and risk architecture separated from the oracle implementation.
 
@@ -444,6 +452,13 @@ VeilLend will **not build a separate bridge**.
 Instead, future production deployment will use existing Base ↔ Horizen bridging and ecosystem infrastructure to make supported Base-originating assets available to VeilLend lending markets on Horizen.
 
 This integration is an ecosystem and liquidity expansion path rather than a dependency for the core confidential lending architecture.
+
+> **Current testnet reality:** Base-originating assets (WETH, USDC) are
+> already enabled on the current Testnet deployment. Their testnet prices are
+> fed by the temporary **Testnet/Demo** Base-Chainlink relay into an
+> owner-gated demo oracle — a convenience for testing, not a production
+> oracle. The production price path is Stork (WETHUSD/USDCUSD, configured);
+> Base-originating liquidity itself remains future ecosystem work.
 
 Planned integrations include:
 
@@ -520,158 +535,20 @@ Coverage includes:
   cap), stale oracle snapshot, tampered proof, wrong-asset witness, replayed
   proof, invalid withdrawal, and no partial state on failure.
 
-### Browser Demo Tests
+### Browser Demo
 
-**13 / 13 passing**
+The `demo/` directory contains a working Next.js frontend using React/TypeScript, wagmi, viem, and browser-side `snarkjs` — **no backend involved in the proving path**.
 
-Coverage includes:
+It runs against the current UUPS Testnet deployment and includes:
 
-* state persistence;
-* encrypted private-state recovery prototype;
-* signature determinism.
+* the guided flow Connect → Create (collateral/debt pair chosen once) → Deposit → Borrow → Repay → Withdraw, each action a real ZK proof;
+* an **Assets** panel (vCOL/vDBT active; WETH/USDC enabled and testable; ZEN locked) with per-asset balances and decimals;
+* a **"Testnet / Demo Price Source — Base Chainlink → Mock Oracle"** panel with live WETH/USD and USDC/USD prices and a **Refresh Prices** action (relay-fed, server-side owner signature — users never submit a price; **TESTNET/DEMO ONLY**, the production oracle path is Stork);
+* confidential liquidation demonstration, encrypted private-state recovery prototype, signature determinism test;
+* developer/test tools (mint, seed liquidity) visually separated from the user flow.
 
-### Horizen Testnet E2E
-
-Real Groth16 proofs have been exercised against the Horizen testnet deployment for:
-
-```text
-Create Position
-
-      ↓
-
-Deposit
-
-      ↓
-
-Borrow
-
-      ↓
-
-Repay
-
-      ↓
-
-Withdraw
-```
-
-The commitment chain advances on-chain through the lifecycle.
-
-The liquidation path has also been exercised:
-
-```text
-Undercollateralize position
-
-      ↓
-
-Generate liquidation proof
-
-      ↓
-
-On-chain verification
-
-      ↓
-
-In-circuit settlement
-
-      ↓
-
-Position closed
-```
-
-The recovery prototype has additionally demonstrated:
-
-```text
-Encrypted backup
-
-      ↓
-
-Clear local state
-
-      ↓
-
-Recover private state
-
-      ↓
-
-Recompute Poseidon commitment
-
-      ↓
-
-Match on-chain commitment
-```
-
-Historical testnet evidence is preserved in:
-
-* `docs/testnet-proof-evidence.md`
-* `docs/testnet-liquidation-evidence.md`
-
----
-
-## Browser Demo
-
-The `demo/` directory contains a working Next.js frontend using:
-
-* React / TypeScript;
-* wagmi;
-* viem;
-* browser-side `snarkjs`;
-* the deployed Horizen testnet contracts.
-
-There is **no backend involved in the proving path**.
-
-The core demo flow is:
-
-```text
-Connect wallet
-
-      ↓
-
-Create position (collateral/debt pair chosen once, fixed for the position)
-
-      ↓
-
-Deposit collateral
-
-      ↓
-
-Borrow  ← each action: browser-side ZK proof over a fresh signed
-      ↓    price snapshot, verified in the same transaction
-
-Repay
-
-      ↓
-
-Withdraw
-```
-
-Minting test tokens and seeding liquidity are developer tools in a visually
-separate testnet-tools section, not part of the user flow.
-
-The demo also includes:
-
-* confidential liquidation demonstration;
-* encrypted private-state recovery prototype;
-* signature determinism test.
-
-See `demo/README.md` for the detailed walkthrough.
-
-### Test Assets
-
-`vCOL` is the test collateral token.
-
-`vDBT` is the test debt token.
-
-Both are **test/demo assets only** and are not production assets.
-
-`WETH` (18 decimals) and `USDC` (6 decimals) are the intended production
-assets, wired in code to the Stork ETHUSD/USDCUSD feeds; they activate with
-the next Testnet deployment (the current deployment does not enable them).
-Mixed-decimal accounting is value-based and decimal-aware — 18-dec-normalized
-prices make the ZK comparisons exact across 6/18 decimals, and the borrow cap
-is a dollar-value cap, all covered by the local six-pair lifecycle suite.
-`ZEN` remains locked (no ZEN/USD Stork feed).
-
----
+**Full walkthrough, asset table, deployed addresses, and limitations: see
+[`demo/README.md`](demo/README.md).**
 
 ## Repository Structure
 
@@ -852,17 +729,20 @@ A production deployment requires additional security review and audit work.
 
 The **currently live** testnet deployment uses immutable verifier addresses and a non-upgradeable protocol contract (the fixed M1 deployment recorded in `deployments/horizenTestnet.json`).
 
-The **repository code** has since been converted to a UUPS upgradeable architecture (ERC-1967 proxy, `Initializable`/`Ownable2StepUpgradeable`/`PausableUpgradeable`/`ReentrancyGuardUpgradeable`/`UUPSUpgradeable`, owner-only `_authorizeUpgrade`, upgrade tests) **awaiting the next Testnet deployment**. Until that deployment happens, any on-chain change still requires a fresh deployment.
+The **repository code** has since been deployed as a NEW, separate UUPS upgradeable deployment — the current official Testnet deployment (ERC-1967 proxy `0xc1e2cDADBf14717DfEE7ffA23EAf2b21e6004a5B` → implementation `0x353EcfaFa07a60f1Ed473ed4cE3F1c2624fF7aa5`, owner-only `_authorizeUpgrade`; record in `deployments/horizenTestnet-uups.json`). The M1 deployment above was never upgraded and remains historical.
 
 Production upgrade governance, emergency process, and recovery mechanics remain open M2 work.
 
-### Testnet Oracle
+### Testnet / Demo Price Source — Base Chainlink → Mock Oracle
 
-The current oracle is a mock, owner-managed implementation.
+The current Testnet deployment temporarily prices assets through a demo-only path:
+`Base Mainnet Chainlink (ETH/USD, USDC/USD) → isolated relay (relay/base-price-relay.mjs) → OwnerMockPriceOracle (owner-gated, 0x024C…b715) → VeilLend`. The relay is server-side, holds the owner key in its environment, accepts no user-supplied prices, and can be deleted without touching VeilLend.
 
-Its administrative staleness configuration does not currently have a technical upper bound.
+This is **TESTNET/DEMO ONLY** — it is not production oracle infrastructure and not a Stork replacement. The production path is Stork (adapter deployed, feeds configured; activates when Stork testnet publishing starts).
 
-Production should use a production oracle such as Horizen Stork.
+### Orphaned Legacy Oracle
+
+The original M1-era `MockPriceOracle` had an open (permissionless) `setPrice` and is **no longer used by the protocol** (orphaned by `setOracle`); the demo oracle is the owner-gated `OwnerMockPriceOracle`.
 
 ### Private-State Recovery
 
@@ -896,7 +776,15 @@ Utilization-based rate parameters are stored but not yet active.
 
 ### Test Assets
 
-`vCOL` and `vDBT` are testnet-only mock assets.
+`vCOL` (collateral) and `vDBT` (debt) are testnet-only mock assets.
+
+`WETH` (18 decimals, Stork feed **WETHUSD**) and `USDC` (6 decimals, Stork
+feed **USDCUSD**) are enabled on the current Testnet deployment and fully
+testable — a real WETH/USDC lifecycle (create → deposit → borrow → repay →
+withdraw with real ZK proofs) has been executed on-chain. Until Stork testnet
+publishing starts they are priced by the temporary Base Chainlink demo relay
+(see Oracle). `ZEN` remains locked (no ZEN/USD Stork feed). USDT is not
+supported.
 
 Nothing in the current deployment represents production mainnet liquidity.
 
@@ -907,8 +795,11 @@ Nothing in the current deployment represents production mainnet liquidity.
 VeilLend currently includes:
 
 * no administrative withdrawal path;
-* no upgrade key;
-* immutable verifier addresses;
+* upgrade authority restricted to the contract owner (UUPS
+  `_authorizeUpgrade` is owner-only; no multisig/timelock governance yet —
+  tracked as M2 work);
+* verifier addresses set once at initialization, changeable only through an
+  owner-authorized UUPS upgrade;
 * emergency pause without a custody backdoor;
 * non-reentrant value-transfer paths;
 * paired accounting and token movement;
@@ -977,6 +868,8 @@ Production milestones include Stork oracle integration, broader collateral suppo
 
 ## License
 
-VeilLend's original protocol and application code is released under the MIT License.
+Copyright (c) 2026 H-crowe.
 
-The snarkjs-generated Solidity verifiers under `contracts/zk/` retain their GPL-3.0 licensing as indicated by their SPDX headers.
+- **VeilLend original code** (protocol contracts, project-authored Circom circuits, scripts, tests, documentation, demo) is licensed under the **MIT License** — see [`LICENSE`](LICENSE).
+- **`contracts/zk/*` verifiers** are snarkjs-generated build artifacts (from circuits including GPL-3.0 circomlib templates) and retain their **GPL-3.0** SPDX headers.
+- **Third-party dependencies** (OpenZeppelin MIT; snarkjs/circomlib/circomlibjs GPL-3.0; others) remain under their own licenses.

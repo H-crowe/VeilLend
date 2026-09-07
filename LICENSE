@@ -1,6 +1,6 @@
 MIT License
 
-Copyright (c) 2026 VeilLend contributors
+Copyright (c) 2026 H-crowe
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -22,8 +22,20 @@ SOFTWARE.
 
 ---
 
-Licensing scope note: this MIT license covers the VeilLend protocol
-contracts, circuits, scripts, tests, documentation and demo application.
-The snarkjs-generated Solidity verifiers under `contracts/zk/` carry their
-own `SPDX-License-Identifier: GPL-3.0` headers inherited from the snarkjs
-toolchain, as documented in the repository README.
+Licensing scope note:
+
+1. This MIT license covers VeilLend's ORIGINAL code: the protocol contracts
+   (`contracts/*.sol`, `contracts/oracles/*`, test contracts), the Circom
+   circuits authored for this project (`circuits/*.circom` — note that they
+   `include` GPL-3.0 circomlib templates at build time), scripts, tests,
+   documentation, and the demo application (`demo/`, excluding vendored
+   third-party browser bundles under `demo/public/`).
+2. The snarkjs-generated Solidity verifiers under `contracts/zk/` are build
+   artifacts of the snarkjs toolchain (GPL-3.0) compiled from circuits that
+   include GPL-3.0 circomlib templates. They carry and retain their own
+   `SPDX-License-Identifier: GPL-3.0` headers.
+3. Third-party components and dependencies (including OpenZeppelin (MIT),
+   snarkjs, circomlib, circomlibjs (GPL-3.0), ethers, hardhat and the demo's
+   npm packages) remain under their own respective licenses.
+
+See the README License section for a short summary.

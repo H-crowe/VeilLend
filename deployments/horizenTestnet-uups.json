@@ -1,0 +1,148 @@
+{
+  "network": "horizenTestnet",
+  "chainId": "2651420",
+  "deploymentModel": "UUPS / ERC-1967 proxy (current official deployment)",
+  "legacyDeployment": "horizenTestnet.json (M1, immutable, non-proxy) — untouched",
+  "sourceCommit": "82ad94f",
+  "deployer": "0x1725a9Ba5E788Ac73AE7f14a2C976DB462c5F204",
+  "deployedAt": "2026-09-07T17:42:14.942Z",
+  "addresses": {
+    "veilLend": "0xc1e2cDADBf14717DfEE7ffA23EAf2b21e6004a5B",
+    "veilLendImplementation": "0x353EcfaFa07a60f1Ed473ed4cE3F1c2624fF7aa5",
+    "stateTransitionVerifier": "0xbdF87292EAAd22dB17C5ADCA3eAC33Db891ab3f1",
+    "solvencyVerifier": "0x18C104Dc76A6F4Dad6cC1f2E467D9EbC10162676",
+    "riskTransitionVerifier": "0xB54B51664215ED17F238D52EDD8d5E549D136b26",
+    "liquidationVerifier": "0xe33b96CC86D3c68119312b9B2274F1e734211daa",
+    "storkPriceOracle": "0xa2c0a60B4A360e88cA5f90860A3B75A3DDfED33D",
+    "storkOracle": "0xacC0a0cF13571d30B4b8637996F5D6D774d4fd62",
+    "collateralToken": "0xb5a5b0f1083965B9d92dCd94E5BCdDb868BfcFCE",
+    "debtToken": "0xe48a8EC02EB14BB52Fe363D3B2A32e264d3B5D7f",
+    "WETH": "0x4200000000000000000000000000000000000006",
+    "USDC": "0x01c7AEb2A0428b4159c0E333712f40e127aF639E",
+    "supersededPreDeployImpl": "0x2bD5ec9895bDCC8968DAa1C26c3Da120F0D7Cf9B",
+    "mockPriceOracle": "0x024CF745c737B74f8BCc84d1C73687853310b715"
+  },
+  "deploymentLog": [
+    {
+      "label": "TokenMock vCOL",
+      "address": "0xb5a5b0f1083965B9d92dCd94E5BCdDb868BfcFCE",
+      "txHash": "0x3aaead4c396ee405f0c4107a7fd6373561fa970a7a4b7fba1833ce33fe1cb35d",
+      "block": "27212050"
+    },
+    {
+      "label": "TokenMock vDBT",
+      "address": "0xe48a8EC02EB14BB52Fe363D3B2A32e264d3B5D7f",
+      "txHash": "0x5ce3d353ea9f3f55cd6362b5203c9a33b559c298c636798a65fa77e57a4316b7",
+      "block": "27212123"
+    },
+    {
+      "label": "Groth16Verifier (state_transition)",
+      "address": "0xbdF87292EAAd22dB17C5ADCA3eAC33Db891ab3f1",
+      "txHash": "0xddefd456b9f00c454efdb19241323b068531c78cc8e4849ffb9565b8bf3a36f1",
+      "block": "27212764"
+    },
+    {
+      "label": "SolvencyVerifier",
+      "address": "0x18C104Dc76A6F4Dad6cC1f2E467D9EbC10162676",
+      "txHash": "0xe969cf52a2853d918fca1813809bd7b58281300fc031f899007e9046742ce004",
+      "block": "27212937"
+    },
+    {
+      "label": "RiskTransitionVerifier",
+      "address": "0xB54B51664215ED17F238D52EDD8d5E549D136b26",
+      "txHash": "0x16f5e7ed76c4c014f4c4ae7d9bac6f8c5ac018ea52b7aa4d2c5071d326543b5e",
+      "block": "27212939"
+    },
+    {
+      "label": "LiquidationVerifier",
+      "address": "0xe33b96CC86D3c68119312b9B2274F1e734211daa",
+      "txHash": "0x7bf124a33c4f094259605c86fe1895334c046d30bf6862ab88dce2205e9b9c36",
+      "block": "27212955"
+    },
+    {
+      "label": "StorkPriceOracle (real Stork)",
+      "address": "0xa2c0a60B4A360e88cA5f90860A3B75A3DDfED33D",
+      "txHash": "0x3479e172586e04eada46389c697740ebb7cbe417a4470935e7c858ca3b7776bc",
+      "block": "27212959"
+    },
+    {
+      "label": "VeilLend implementation (pre-deploy copy, unused by proxy)",
+      "address": "0x2bD5ec9895bDCC8968DAa1C26c3Da120F0D7Cf9B",
+      "txHash": "0xcdd18f614d3bf2b871fa505e38ba2db339302c68651c5885c69a9ab7ad5822d5",
+      "block": "27212963"
+    },
+    {
+      "label": "VeilLend implementation (proxy target, via upgrades plugin)",
+      "address": "0x353EcfaFa07a60f1Ed473ed4cE3F1c2624fF7aa5",
+      "txHash": "0xd269e0f92a24026f3f35ea0226df90ef1ed22c79d0f3b0303a7ea3c5bc0f8f0f",
+      "block": "27212973"
+    },
+    {
+      "label": "VeilLend (UUPS proxy)",
+      "address": "0xc1e2cDADBf14717DfEE7ffA23EAf2b21e6004a5B",
+      "txHash": "0x6bea2f74484eb95a9d45d9348a124fb937912c9fc55fdcd8d32253a6065bd88a",
+      "block": "27212982"
+    },
+    {
+      "label": "adapter.setFeedId(WETH, ETHUSD)",
+      "txHash": "0x147f0d340c7eee752f83bf1e2f3c106e2006f7aa33df2b5aae836d4b49efd712"
+    },
+    {
+      "label": "adapter.setFeedId(USDC, USDCUSD)",
+      "txHash": "0x024db3c62238597de5ee5804cd309c1185c2f449086056657bfa97d39d60439e"
+    },
+    {
+      "label": "enableCollateralAsset(vCOL)",
+      "txHash": "0x41fd3b97cb28202c883174782beeb3db852d3769992b2d5bdc3f61ffe4eed850"
+    },
+    {
+      "label": "enableCollateralAsset(WETH)",
+      "txHash": "0xc838633d54008abc4ccf325d0b69292eb7fe41047683d6b7d0ec8f778ef88de5"
+    },
+    {
+      "label": "enableCollateralAsset(USDC)",
+      "txHash": "0x144acc9fa1c659e4662bf86e30a3ddc0067be5e04a1ac0198287030d5dc8a28d"
+    },
+    {
+      "label": "enableDebtAsset(vDBT)",
+      "txHash": "0xcd0f9da6f86606af732a5c83444c018e61cf9ce97987aba598b13eac850eab61"
+    },
+    {
+      "label": "enableDebtAsset(USDC)",
+      "txHash": "0xe50a4322c34b5f8c3bbad4feb78e6bbcb67bb9a6c082941a902593e5fd37203c"
+    }
+  ],
+  "configuration": {
+    "assets": {
+      "collateral": [
+        "vCOL (18)",
+        "WETH (18)",
+        "USDC (6)"
+      ],
+      "debt": [
+        "vDBT (18)",
+        "USDC (6)"
+      ],
+      "zen": "NOT enabled (locked — no Stork ZEN/USD feed)"
+    },
+    "feeds": {
+      "WETH": "keccak256(ETHUSD) 0x59102b37…7160",
+      "USDC": "keccak256(USDCUSD) 0x7416a56f…290c"
+    },
+    "maxLtvBps": 7500,
+    "liquidationThresholdBps": 8500,
+    "maxPriceStalenessSeconds": 3600
+  },
+  "postDeployChecks": "28 PASS / 0 FAIL (incl. ERC-1967 slot, owner, verifiers, feeds, decimals, UUPS auth both directions)",
+  "explorerVerification": "All 9 contracts + proxy verified and proxy linked to implementation",
+  "oracleUpdate": {
+    "note": "VeilLend now points at the owner-gated OwnerMockPriceOracle (relay-fed from Base Chainlink; TESTNET/DEMO ONLY). The permissionless original MockPriceOracle was NOT reused for security. Stork adapter remains deployed and intact with WETHUSD/USDCUSD feeds for the production path.",
+    "ownerMockPriceOracleDeploymentTx": "0xb21adc093e86168a2db961d4c0a1b3d7ba47fea419d858bb634d5a258a89144e",
+    "setOracleTx": "0xbea668c8af0850abcbd274b0dc3ce5c9287bb5941e4ea6de6d27db4de1956b55",
+    "storkWethFeedCorrectionTx": "0x0cf9d68abca65be3aa9efc6bc9147dfc8a89ec2981d60ad918159615714f0161",
+    "storkFeeds": {
+      "WETH": "keccak256(WETHUSD) 0x8afba5f1a5d4969d23c3b42db1b88f8a9c8176392de5bf066752260478ce82b8",
+      "USDC": "keccak256(USDCUSD) 0x7416a56f222e196d0487dce8a1a8003936862e7a15092a91898d69fa8bce290c"
+    }
+  }
+}

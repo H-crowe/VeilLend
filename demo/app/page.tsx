@@ -125,6 +125,7 @@ export default function Page() {
       ) : (
         <>
           <FlowStrip step={flowProgress} />
+          <PricePanel v={v} />
 
           {/* 1 — positions list + creation (pair is chosen here, once) */}
           <section className="panel">
@@ -174,9 +175,9 @@ export default function Page() {
             </div>
             <button className="action-btn" disabled={busy} onClick={() => act("create")}>Create New Position</button>
             <div className="footnote">
-              WETH and USDC are the real assets VeilLend targets — they become selectable with the next
-              Testnet deployment, which wires them to live Stork prices. Today&apos;s Testnet runs on the
-              demo pair vCOL/vDBT.
+              WETH and USDC are enabled on this Testnet deployment and priced by the temporary
+              Testnet/Demo Base Chainlink relay. Their production price path is Stork (WETHUSD/USDCUSD),
+              already configured — it activates when Stork testnet publishing starts.
             </div>
           </section>
 
@@ -190,7 +191,7 @@ export default function Page() {
                 <span className="hint">
                   Pair: {posCollateral.symbol} as collateral · {posDebt.symbol} as debt
                   {posCollateral.status === "pending" || posDebt.status === "pending"
-                    ? " (usable after next Testnet deployment)" : ""}
+                    ? " (not yet enabled)" : ""}
                 </span>
               </div>
               <div className="pos-row">
@@ -310,7 +311,7 @@ export default function Page() {
                     <td style={{ padding: "4px 8px" }}>{a.storkFeedId ? "Stork (live prices)" : "Mock oracle"}</td>
                     <td style={{ padding: "4px 8px" }}>
                       {a.status === "active" ? <span style={{ color: "var(--accent)" }}>Usable now</span>
-                        : a.status === "pending" ? <span style={{ color: "var(--warn)" }}>Available after next Testnet deployment</span>
+                        : a.status === "pending" ? <span style={{ color: "var(--warn)" }}>Awaiting Stork testnet publishing</span>
                         : <span style={{ color: "var(--text-dim)" }}>🔒 Locked — no price feed</span>}
                     </td>
                   </tr>
@@ -318,9 +319,10 @@ export default function Page() {
               </tbody>
             </table>
             <div className="footnote">
-              WETH and USDC are the intended production assets (priced by the Stork oracle). On the current
-              Testnet deployment only the demo pair vCOL/vDBT is enabled; ZEN has no price feed and stays
-              locked. USDT is not supported.
+              All four lending assets are enabled and testable. WETH/USDC prices come from the temporary
+              Testnet/Demo Base Chainlink relay; the production price path is Stork (WETHUSD/USDCUSD,
+              configured, awaiting Stork testnet publishing). ZEN has no price feed and stays locked.
+              USDT is not supported.
             </div>
           </section>
 
@@ -337,7 +339,6 @@ export default function Page() {
               <button className="action-btn" disabled={busy || !v.isConnected} onClick={() => v.mintTestTokens("vCOL", 100n * 10n ** 18n)}>Mint 100 vCOL</button>
               <button className="action-btn" disabled={busy || !v.isConnected} onClick={() => v.mintTestTokens("vDBT", 50n * 10n ** 18n)}>Mint 50 vDBT</button>
               <button className="action-btn" disabled={busy || !v.isConnected} onClick={() => v.seedLiquidity(20n * 10n ** 18n)}>Seed 20 vDBT liquidity</button>
-              <button className="action-btn" disabled={busy || !v.isConnected} onClick={() => v.refreshOraclePrices().catch(() => { /* surfaced via tx state */ })}>Push mock oracle prices</button>
             </div>
             <div className="footnote">
               Seeding mints vDBT and repays it into the protocol reserve — on this Testnet, borrows are
@@ -405,6 +406,47 @@ function FlowStrip({ step }: { step: number }) {
         </span>
       ))}
     </div>
+  );
+}
+
+/** TESTNET/DEMO ONLY — Base Chainlink → relay → OwnerMockPriceOracle. */
+function PricePanel({ v }: { v: ReturnType<typeof useVeilLend> }) {
+  const fmt = (p1e8: string) => "$" + (Number(p1e8) / 1e8).toFixed(6);
+  const ago = (u?: number) => (u ? `${Math.max(0, Math.round((Date.now() / 1000 - u) / 60))} min ago` : "—");
+  return (
+    <section className="panel">
+      <div className="panel-title">Testnet / Demo Price Source — Base Chainlink → Mock Oracle</div>
+      <p style={{ color: "var(--text-secondary)", fontSize: 13, marginBottom: 12 }}>
+        Real market prices from Base mainnet Chainlink are relayed into the testnet demo oracle by an
+        isolated server-side service. This is a temporary demo mechanism — the production oracle is
+        Stork (activated once Stork testnet publishing starts). You cannot set prices manually.
+      </p>
+      <div className="two-col">
+        {["WETH", "USDC"].map((sym) => {
+          const info = v.relayedPrices.find((r) => r.symbol === sym);
+          return (
+            <div className="metric" key={sym}>
+              <div className="label">{`${sym} / USD (Base Chainlink)`}</div>
+              <div className="value" style={{ fontFamily: "var(--mono)" }}>
+                {info ? fmt(info.price1e8) : "…"}
+              </div>
+              <div className="hint">Updated: {info ? ago(info.horizenUpdatedAt) : "—"}</div>
+            </div>
+          );
+        })}
+      </div>
+      <button
+        className="action-btn"
+        disabled={(v.tx.status !== "idle" && v.tx.status !== "confirmed" && v.tx.status !== "failed") || !v.isConnected}
+        onClick={() => v.refreshOraclePrices().catch(() => { /* surfaced via tx state */ })}
+      >
+        Refresh Prices
+      </button>
+      <div className="footnote">
+        Refresh asks the relay to fetch the latest Base Chainlink prices and update the testnet oracle
+        (one owner-signed transaction). Prices cannot be entered or chosen manually.
+      </div>
+    </section>
   );
 }
 

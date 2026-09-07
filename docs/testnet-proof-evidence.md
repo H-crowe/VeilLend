@@ -41,6 +41,12 @@ no mocks, no signatures, no hash-only shortcuts, no bypasses.
 
 ## 2. Deployed contracts (Horizen Testnet, chain ID 2651420)
 
+> **Historical context:** the addresses below are the **first M1-era
+> deployment** (predating even the repaired M1 deployment `0xeCB4…4787` and
+> the current UUPS deployment `0xc1e2…4a5B`). They are preserved as evidence
+> for the proof test recorded here and are **not** the current deployment.
+> Current deployment: `deployments/horizenTestnet-uups.json`.
+
 | Contract | Address | Role |
 |---|---|---|
 | **VeilLend** | `0x9fd6477Dd3b5eDB4e55A7D7F962Af0e8e332a9B9` | protocol (positions, custody, transitions) |

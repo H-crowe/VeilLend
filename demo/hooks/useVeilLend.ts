@@ -39,6 +39,14 @@ export interface TxState {
   softWarning?: string;
 }
 
+export interface RelayedPrice {
+  symbol: string;
+  price1e8: string;
+  source: string;
+  chainlinkUpdatedAt?: number;
+  horizenUpdatedAt?: number;
+}
+
 export interface OnChainPosition {
   collateralAsset: string;
   debtAsset: string;
@@ -197,8 +205,9 @@ export function useVeilLend() {
   const oraclePrices = useCallback(async (collateralAddr?: string, debtAddr?: string) => {
     if (!publicClient) throw new Error("no RPC");
     // IPriceOracle is the single source of truth (IPriceOracle.getPrice):
-    // StorkPriceOracle adapter when configured, mock oracle for the legacy
-    // testnet deployment until the Stork-backed contract lands.
+    // the StorkPriceOracle adapter when configured (production path), or the
+    // owner-gated demo oracle fed by the Testnet/Demo Base Chainlink relay
+    // (current active testnet source).
     const oracleAddr = (ADDRESSES.storkPriceOracle || ADDRESSES.mockPriceOracle) as Address;
     const colAsset = (collateralAddr ?? ADDRESSES.collateralToken) as Address;
     const debtAsset = (debtAddr ?? ADDRESSES.debtToken) as Address;
@@ -249,84 +258,50 @@ export function useVeilLend() {
     if (stale(col[1]) || stale(debt[1])) {
       throw new Error(ADDRESSES.storkPriceOracle
         ? "Oracle prices are stale — use 'Push fresh oracle prices' to relay a Stork update, then retry."
-        : "Oracle prices are stale (mock testnet oracle, 1h freshness limit). Use 'Refresh oracle prices' in Testnet assets, then retry.");
+        : "Oracle prices are stale — use the 'Refresh Prices' action (Testnet/Demo Base Chainlink relay), then retry.");
     }
   }, [publicClient]);
 
   /**
-   * Price refresh, oracle-aware:
-   * - Stork path (production): fetch publisher-signed updates from the Stork
-   *   API and relay them through VeilLend.pushOracleUpdate (forwards to the
-   *   StorkPriceOracle adapter → Stork with the required fee). Permissionless.
-   * - Mock path (legacy testnet deployment): owner-only setPrice calls.
+   * TESTNET/DEMO ONLY price source: the isolated Base-Chainlink relay
+   * (relay/base-price-relay.mjs) reads real Chainlink ETH/USD and USDC/USD
+   * on Base mainnet and updates the owner-gated OwnerMockPriceOracle with
+   * the deployer key (server-side only). The demo never touches a private
+   * key and never submits a price — it only asks the relay to refresh and
+   * displays the result.
+   *
+   * Production oracle path (Stork): the deployed StorkPriceOracle adapter +
+   * pushOracleUpdate remain intact; switch ADDRESSES.storkPriceOracle when
+   * Stork testnet publishing goes live.
    */
+  const priceRelayUrl = process.env.NEXT_PUBLIC_PRICE_RELAY_URL ?? "http://localhost:8787";
+
+  const fetchRelayPrices = useCallback(async (): Promise<RelayedPrice[]> => {
+    const res = await fetch(`${priceRelayUrl}/prices`);
+    if (!res.ok) throw new Error(`price relay unreachable (${res.status}) — start it with: node relay/base-price-relay.mjs`);
+    const body = (await res.json()) as Record<string, { price1e8?: string; chainlinkUpdatedAt?: number; horizenOracle?: { updatedAt?: number } | null; source?: string }>;
+    return ["WETH", "USDC"].map((sym) => ({
+      symbol: sym,
+      price1e8: body[sym]?.price1e8 ?? "0",
+      source: body[sym]?.source ?? "",
+      chainlinkUpdatedAt: body[sym]?.chainlinkUpdatedAt,
+      horizenUpdatedAt: body[sym]?.horizenOracle?.updatedAt,
+    }));
+  }, [priceRelayUrl]);
+
+  const [relayedPrices, setRelayedPrices] = useState<RelayedPrice[]>([]);
+
   const refreshOraclePrices = useCallback(async () => {
     if (!isConnected || !address) throw new Error("wallet not connected");
-    const walletClient = await getWallet();
-    setTx({ status: "wallet" });
-    if (ADDRESSES.storkPriceOracle) {
-      const token = process.env.NEXT_PUBLIC_STORK_ACCESS_TOKEN;
-      if (!token) throw new Error("Stork relay is not configured (NEXT_PUBLIC_STORK_ACCESS_TOKEN missing) — obtain a Stork API credential to push fresh signed updates");
-      const res = await fetch(`https://api.stork.network/v1/observations?assets=ETHUSD,USDCUSD`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error(`Stork API error ${res.status} — cannot fetch signed updates`);
-      const body = (await res.json()) as { data?: Record<string, { temporal_numeric_value: { timestamp_ns: string; quantized_value: string }; publisher_merkle_root: string; value_compute_alg_hash: string; r: string; s: string; v: number }> };
-      if (!body.data) throw new Error("Stork API returned no signed updates");
-      const feedByAsset: Record<string, `0x${string}`> = {
-        ETHUSD: "0x59102b37de83bdda9f38ac8254e596f0d9ac61d2035c07936675e87342817160",
-        USDCUSD: "0x7416a56f222e196d0487dce8a1a8003936862e7a15092a91898d69fa8bce290c",
-      };
-      const updates = Object.entries(body.data).map(([asset, o]) => ({
-        temporalNumericValue: {
-          timestampNs: BigInt(o.temporal_numeric_value.timestamp_ns),
-          quantizedValue: BigInt(o.temporal_numeric_value.quantized_value),
-        },
-        id: feedByAsset[asset],
-        publisherMerkleRoot: o.publisher_merkle_root as `0x${string}`,
-        valueComputeAlgHash: o.value_compute_alg_hash as `0x${string}`,
-        r: o.r as `0x${string}`,
-        s: o.s as `0x${string}`,
-        v: o.v,
-      }));
-      // VeilLend.pushOracleUpdate forwards raw calldata to the IPriceOracle;
-      // encode the adapter's pushStorkUpdate(updates) call as those bytes.
-      const storkAdapterAbi = [{
-        name: "pushStorkUpdate", type: "function", stateMutability: "payable",
-        inputs: [{
-          name: "updates", type: "tuple[]", components: [
-            { name: "temporalNumericValue", type: "tuple", components: [
-              { name: "timestampNs", type: "uint64" }, { name: "quantizedValue", type: "int192" }] },
-            { name: "id", type: "bytes32" },
-            { name: "publisherMerkleRoot", type: "bytes32" },
-            { name: "valueComputeAlgHash", type: "bytes32" },
-            { name: "r", type: "bytes32" }, { name: "s", type: "bytes32" }, { name: "v", type: "uint8" },
-          ] }],
-        outputs: [],
-      }] as const;
-      const oracleUpdateData = encodeFunctionData({ abi: storkAdapterAbi, functionName: "pushStorkUpdate", args: [updates as never] });
-      // Stork fee: singleUpdateFeeInWei (1 wei) per update in the batch
-      const fee = (await publicClient!.readContract({ address: ADDRESSES.storkOracle as Address, abi: [{ name: "singleUpdateFeeInWei", type: "function", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] }] as const, functionName: "singleUpdateFeeInWei" })) as bigint;
-      const hash = await walletClient.writeContract({
-        address: ADDRESSES.veilLend as Address, abi: veilLendAbi,
-        functionName: "pushOracleUpdate", args: [oracleUpdateData],
-        value: fee * BigInt(updates.length),
-      });
-      setTx((t) => ({ ...t, status: "confirming", txHash: hash }));
-      await publicClient!.waitForTransactionReceipt({ hash });
-      setTx({ status: "confirmed", txHash: hash, explorerUrl: explorerTx(hash), proofVerified: false });
-      return;
-    }
-    // Legacy mock-oracle path (current testnet deployment)
-    const { collateralPrice, debtPrice } = await oraclePrices();
-    const hash = await walletClient.writeContract({ address: ADDRESSES.mockPriceOracle as Address, abi: oracleAbi, functionName: "setPrice", args: [ADDRESSES.collateralToken as Address, collateralPrice] });
-    setTx((t) => ({ ...t, status: "confirming", txHash: hash }));
-    await publicClient!.waitForTransactionReceipt({ hash });
-    const hash2 = await walletClient.writeContract({ address: ADDRESSES.mockPriceOracle as Address, abi: oracleAbi, functionName: "setPrice", args: [ADDRESSES.debtToken as Address, debtPrice] });
-    setTx((t) => ({ ...t, status: "confirming", txHash: hash2 }));
-    await publicClient!.waitForTransactionReceipt({ hash: hash2 });
-    setTx({ status: "confirmed", txHash: hash2, explorerUrl: explorerTx(hash2), proofVerified: false });
-  }, [getWallet, isConnected, address, publicClient, oraclePrices]);
+    setTx({ status: "preparing" });
+    const res = await fetch(`${priceRelayUrl}/refresh`, { method: "POST" });
+    const body = (await res.json()) as { txHash?: string; error?: string };
+    if (!res.ok || !body.txHash) throw new Error(body.error ?? `price relay refresh failed (${res.status})`);
+    setTx({ status: "confirmed", txHash: body.txHash, explorerUrl: explorerTx(body.txHash), proofVerified: false });
+    setRelayedPrices(await fetchRelayPrices().catch(() => []));
+  }, [isConnected, address, priceRelayUrl, fetchRelayPrices]);
+
+  useEffect(() => { void fetchRelayPrices().then(setRelayedPrices).catch(() => {}); }, [fetchRelayPrices, tx.status]);
 
   const fail = useCallback((err: unknown): never => {
     const raw = err instanceof Error ? err.message : String(err);
@@ -568,8 +543,8 @@ export function useVeilLend() {
     switchChain: () => switchChain({ chainId: horizenTestnet.id }),
     snarkReady, positions, selectedId, setSelectedId: selectPosition, selectedState,
     onChain, refreshOnChain, oraclePrices,
-    runAction, mintTestTokens, seedLiquidity, refreshOraclePrices, isEligible,
-    tx, setTx, RISK_PARAMS, ASSETS, assetBalances, refreshAssetBalances,
+    runAction, mintTestTokens, seedLiquidity, isEligible,
+    tx, setTx, RISK_PARAMS, ASSETS, assetBalances, refreshAssetBalances, relayedPrices, refreshOraclePrices,
   };
 }
 

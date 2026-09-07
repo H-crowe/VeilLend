@@ -20,6 +20,11 @@
 > (VeilLend `0xeCB439fbE792Bec4E005f1809E6DCF4FB37d4787`). The addresses and
 > transactions below are the **recorded historical evidence** against the
 > superseded deployment and are kept unchanged.
+>
+> **Update:** the CURRENT Testnet deployment is now the separate UUPS/ERC-1967
+> deployment (proxy `0xc1e2…4a5B`, record:
+> [`deployments/horizenTestnet-uups.json`](../deployments/horizenTestnet-uups.json));
+> `horizenTestnet.json` and the addresses below are historical M1 records.
 
 ## 1. What M1 proves
 

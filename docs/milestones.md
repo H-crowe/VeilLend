@@ -239,7 +239,7 @@ Still outstanding for M2:
 * on-chain recovery/escape mechanism (recovery remains a client-side prototype);
 * expanded fuzz and invariant testing;
 * deeper access-control/administration hardening review;
-* the next Testnet deployment carrying the UUPS + Stork changes.
+* the next Testnet deployment carrying the UUPS + Stork changes — **done**: the current official Testnet deployment is the UUPS/ERC-1967 proxy `0xc1e2…4a5B` (implementation `0x353E…7aa5`), with the Stork adapter deployed and configured (WETH → WETHUSD, USDC → USDCUSD). Testnet price data currently flows through the temporary Base-Chainlink demo relay into an owner-gated oracle until Stork testnet publishing starts; a full real WETH/USDC lifecycle has been executed on-chain.
 
 ---
 

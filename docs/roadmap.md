@@ -39,7 +39,16 @@ The current implementation is documented separately in the M1 evidence package a
 
 ### Current Status
 
-**Technical prototype demonstrated on Horizen Testnet.**
+**Technical prototype demonstrated on Horizen Testnet** — and since this
+section was written, the protocol has been deployed as a separate UUPS/ERC-1967
+deployment (proxy `0xc1e2…4a5B`, record: `deployments/horizenTestnet-uups.json`)
+with the Stork adapter configured (WETHUSD/USDCUSD) and a real WETH/USDC
+lifecycle executed on-chain. Testnet pricing currently flows through the
+temporary Testnet/Demo Base-Chainlink relay (see `docs/oracle-model.md` §5).
+
+For the authoritative, continuously maintained milestone status read
+[`docs/milestones.md`](milestones.md); the sections below are the roadmap's
+original M1 narrative and are preserved as such.
 
 The project has not yet undergone an external security audit and is not considered production-ready.
 
@@ -421,20 +430,29 @@ LONG-TERM
 
 # 8. Source-of-Truth Documentation
 
-| Document                               | Purpose                                               |
-| -------------------------------------- | ----------------------------------------------------- |
-| `docs/roadmap.md`                      | Overall project direction and development progression |
-| `docs/milestones.md`                   | Detailed milestone objectives and acceptance criteria |
-| `docs/M1-evidence.md`                  | Recorded evidence of the M1 technical achievement     |
-| `architecture.md`                      | Privacy architecture, visibility model and design reference |
-| `docs/testnet-proof-evidence.md`       | Testnet proof-chain evidence                          |
-| `docs/testnet-liquidation-evidence.md` | Testnet liquidation evidence                          |
-| `docs/liquidation-model.md`            | Confidential liquidation design                       |
-| `docs/phase3.md`                       | Security hardening and internal findings              |
+| Document / record                              | Purpose                                               |
+| ---------------------------------------------- | ----------------------------------------------------- |
+| `docs/roadmap.md`                              | Overall project direction and development progression (this document) |
+| `docs/milestones.md`                           | Detailed milestone objectives, acceptance criteria, and current milestone status — **the current-status pointer** |
+| `docs/M1-evidence.md`                          | Recorded evidence of the M1 technical achievement     |
+| `architecture.md`                              | Privacy architecture, visibility model and design reference |
+| `docs/solvency-model.md`                       | Solvency math, including the multi-decimals normalization convention |
+| `docs/liquidation-model.md`                    | Confidential liquidation design                       |
+| `docs/oracle-model.md`                         | Oracle design, freshness/trust model, Testnet oracle paths, Stork production status |
+| `docs/testnet-proof-evidence.md`               | M1-era testnet proof-chain evidence (historical deployment) |
+| `docs/testnet-liquidation-evidence.md`         | M1-era testnet liquidation evidence (historical deployment) |
+| `docs/phase3.md`                               | Phase-3 build report: invariants and known gaps       |
+| `deployments/horizenTestnet.json`              | Machine record: M1-era (immutable, historical) deployment |
+| `deployments/horizenTestnet-uups.json`         | Machine record: CURRENT UUPS/ERC-1967 deployment, configuration, and tx hashes |
+| `deployments/horizenTestnet-uups.json` + `relay/base-price-relay.mjs` header | TESTNET/DEMO-only Base-Chainlink price relay (see `docs/oracle-model.md` §5) |
 
 The roadmap describes **where the project is going**.
 
-The milestone documentation describes **what must be achieved**.
+The milestone documentation describes **what must be achieved** and tracks
+**current status** — for the up-to-date milestone state (M1 CLOSED; M2
+Security & Production Hardening in progress, not complete; M3 planned), read
+[`docs/milestones.md`](milestones.md) §"M2 status" and §1 "Milestone Overview"
+first.
 
 The evidence documentation describes **what has actually been demonstrated**.
 

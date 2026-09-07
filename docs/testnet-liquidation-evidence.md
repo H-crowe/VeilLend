@@ -15,6 +15,8 @@
 > (VeilLend `0xeCB439fbE792Bec4E005f1809E6DCF4FB37d4787`). The addresses and
 > transactions below are the **recorded historical evidence** against the
 > superseded deployment and are kept unchanged.
+> **Historical context:** this evidence was recorded against an **M1-era deployment** (superseded by the repaired M1 deployment `0xeCB4…4787` and then by the current UUPS deployment `0xc1e2…4a5B`). All transactions and state below are preserved as recorded; the addresses are **not** the current deployment (see `deployments/horizenTestnet-uups.json`).
+
 ## Demonstrated flow
 
 ```text

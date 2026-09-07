@@ -52,24 +52,59 @@ in the same transaction, so a proof computed against newer prices reverts
    they are multiplied with remain private.
 3. **Timestamp trust.** `updatedAt` is reported by the oracle itself; the
    contract cannot verify observation time beyond the freshness window.
-4. **No decimals handling.** The protocol assumes the oracle reports prices
-   in the documented 1e8 convention for each asset; a mismatched feed would
-   produce economically wrong (but still internally consistent) results.
-   Feed validation is production work.
+4. **Decimal normalization.** The protocol applies an 18-dec-normalized
+   price convention — `normalized = raw oracle price × 10^(18 − decimals)` —
+   so mixed-decimal collateral/debt pairs (e.g. 18 vs 6) compare exact dollar
+   values. Asset decimals are recorded (and bounded to 6..18) at asset-enable
+   time, and the oracle is still expected to report prices in the documented
+   1e8 convention. The full normalization math lives in
+   [`solvency-model.md`](solvency-model.md).
 
-## 5. Stork integration (implemented in code, not yet deployed)
+## 5. Oracle paths on Testnet (two distinct paths — do not mix)
+
+**Testnet/Demo path (TEMPORARY, NOT production):**
+
+```text
+Base Mainnet Chainlink (ETH/USD 0x5001…3a8b, USDC/USD 0x01Ba…1bB5)
+        ↓
+relay/base-price-relay.mjs (isolated, server-side owner key, no user price input)
+        ↓
+OwnerMockPriceOracle (owner-gated, 0x024C…b715) on Horizen Testnet
+        ↓
+VeilLend (via the existing owner-only setOracle)
+```
+
+This exists ONLY to make the current Testnet deployment usable while Stork
+testnet feeds have no active publisher. It is not production-secure, not a
+Stork replacement, and is isolated in `relay/` so it can be deleted without
+touching VeilLend. The M1-era `MockPriceOracle` (permissionless `setPrice`)
+is orphaned — the protocol no longer points at it.
+
+**Production path (intended):**
+
+```text
+Stork signed data  →  Stork on-chain update (pushOracleUpdate, permissionless)
+        ↓
+VeilLend (StorkPriceOracle adapter: WETH → WETHUSD, USDC → USDCUSD)
+```
+
+## 6. Stork integration (deployed; publishing pending)
 
 The **Horizen Stork push oracle** integration is implemented behind the same
 freshness/bounds interface: `IPriceOracle` → `StorkPriceOracle` adapter →
 official Stork contract interface (`IStork`/`StorkStructs`), with registry
-feed IDs for ETHUSD/USDCUSD, per-asset feed registration (owner-only), and a
+feed IDs for WETHUSD/USDCUSD, per-asset feed registration (owner-only), and a
 permissionless same-transaction flow — a publisher-signed snapshot is relayed
 through `VeilLend.pushOracleUpdate` and consumed by the user's ZK proof in one
 transaction. Local tests cover the full path against the mocked Stork
 interface (`test/stork-integration.test.ts`).
 
-Not yet deployed: the live testnet deployment still runs `MockPriceOracle`,
-and Stork's Horizen testnet feeds are not actively published. Multi-source
+The adapter is deployed on Testnet (`0xa2c0…D33D`) and wired to the real
+Stork contract with the official feeds (WETH → WETHUSD `0x8afba5f1…82b8`,
+USDC → USDCUSD `0x7416a56f…290c`); it becomes the active oracle once Stork
+testnet publishing starts (no subscriber relayer operates on Horizen yet —
+Stork's data API requires subscriber credentials, issued via
+sales@stork.network). Multi-source
 aggregation, deviation/heartbeat checks, sequencer/uptime feeds, and
 liquidation-grade price safety remain deliberately out of scope.
 
