@@ -10,7 +10,7 @@
 //   DOMAIN_COMMITMENT = 0x5645494C5F434F4D4D49544D454E545F5631  "VEIL_COMMITMENT_V1"
 //   DOMAIN_NULLIFIER  = 0x5645494C5F4E554C4C49464945525F5631  "VEIL_NULLIFIER_V1"
 //
-// Value encoding (architecture.md §2):
+// Value encoding (docs/ARCHITECTURE.md §2):
 //   value = lo + hi*2^120, lo < 2^120, hi < 2^80  (value < 2^200)
 
 pragma circom 2.0.0;
