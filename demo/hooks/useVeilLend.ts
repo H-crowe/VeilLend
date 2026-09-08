@@ -3,8 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAccount, useConnect, usePublicClient, useSwitchChain, useWalletClient } from "wagmi";
 import { getWalletClient as getWagmiWalletClient } from "@wagmi/core";
-import { encodeFunctionData, getAddress, type Address } from "viem";
-import { ethers } from "ethers";
+import { decodeAbiParameters, encodeFunctionData, getAddress, type Address } from "viem";
 import { horizenTestnet, explorerTx } from "../lib/chains";
 import { ADDRESSES, ASSETS } from "../lib/contracts/addresses";
 import { veilLendAbi, tokenAbi, oracleAbi } from "../lib/contracts/abis";
@@ -19,7 +18,6 @@ import { assertReceiptSuccess } from "../lib/tx/receipt";
 import { deserializeState, serializeState, listPositions, savePosition, getPosition, saveLastSelected, getLastSelected, type StoredPosition } from "../lib/state/store";
 import { wagmiConfig } from "../app/providers";
 
-const ethersAbi = ethers.AbiCoder.defaultAbiCoder();
 const WAD = 10n ** 18n;
 const PRICE_SCALE = 10n ** 8n;
 const BPS = 10000n;
@@ -374,7 +372,7 @@ export function useVeilLend() {
       const sel = revertData.slice(0, 10);
       const args = "0x" + revertData.slice(10);
       try {
-        const dec = ethersAbi.decode(["address", "uint256", "uint256"], args);
+        const dec = decodeAbiParameters([{ type: "address" }, { type: "uint256" }, { type: "uint256" }], args as `0x${string}`);
         if (sel === "0xfb8f41b2") msg = "Token approval missing — approve the token first (allowance " + dec[1].toString() + " < needed " + dec[2].toString() + "). Use the Approve button in Setup.";
         if (sel === "0xe450d38c") msg = "Token balance too low (have " + dec[1].toString() + ", needed " + dec[2].toString() + "). Mint or top up the asset in Setup first.";
       } catch { /* not this error shape */ }
