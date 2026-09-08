@@ -380,7 +380,7 @@ fed by the Testnet/Demo Base-Chainlink relay (Base Mainnet Chainlink
 ETH/USD + USDC/USD → `relay/base-price-relay.mjs` → Horizen). It exists for
 development and E2E demonstration and is **TESTNET/DEMO ONLY** — the
 production oracle path is the deployed Stork adapter (see Production
-Direction below).
+Oracle Path below).
 
 The oracle includes:
 
