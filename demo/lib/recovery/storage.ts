@@ -23,6 +23,14 @@ export function backupFileName(address: string, positionId: string, recoveryId: 
   return `veillend-recovery-${address.toLowerCase().slice(0, 10)}-pos${positionId}-${recoveryId.slice(0, 8)}.json`;
 }
 
+/**
+ * User-facing recovery filename used by the main demo page — clearly
+ * identifies the position number it restores.
+ */
+export function recoveryFileName(positionId: string): string {
+  return `VeilLend-Position-${positionId}-Recovery.json`;
+}
+
 export class MemoryBackupStore implements BackupStore {
   private entries = new Map<string, string>();
   async save(name: string, blobJson: string): Promise<string> {

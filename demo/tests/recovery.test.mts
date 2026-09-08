@@ -151,3 +151,45 @@ test("6. blob leaks no secrets: no signing key, no plaintext controlSecret/salt"
   assert.ok(!s.includes(st.salt.toString()), "plaintext salt in blob");
   assert.ok(!s.includes(st.collateral.toString()), "plaintext collateral in blob");
 });
+
+test("8. wrong chainId: rejected before any signing", async () => {
+  const st = fundedState(84n);
+  const { blob } = await createRecoveryBlob({ state: st, address: WALLET_A, chainId: CHAIN, positionId: "84", signMessage: signWith(signerA) });
+  await assert.rejects(
+    () => recoverStateFromBlob({ blob, address: WALLET_A, chainId: 1, signMessage: signWith(signerA) }),
+    /chain 2651420, expected 1/i,
+  );
+});
+
+test("9. restore-file parsing: malformed JSON and non-V1 blobs are rejected before signing", async () => {
+  const { parseRecoveryFile } = await import("../lib/recovery/restore.ts");
+  const mkFile = (text: string) => new File([text], "recovery.json", { type: "application/json" });
+  await assert.rejects(() => parseRecoveryFile(mkFile("not json at all")), /not a valid recovery file/i);
+  await assert.rejects(() => parseRecoveryFile(mkFile(JSON.stringify({ v: 2, app: "VeilLend Recovery V1" }))), /not a VeilLend Recovery V1 file/i);
+  const st = fundedState(85n);
+  const { blob } = await createRecoveryBlob({ state: st, address: WALLET_A, chainId: CHAIN, positionId: "85", signMessage: signWith(signerA) });
+  const truncated = structuredClone(blob) as unknown as Record<string, unknown>;
+  delete truncated.wrap;
+  await assert.rejects(() => parseRecoveryFile(mkFile(JSON.stringify(truncated))), /incomplete/i);
+  // a well-formed blob parses fine
+  const parsed = await parseRecoveryFile(mkFile(JSON.stringify(blob)));
+  assert.equal(parsed.positionId, "85");
+});
+
+test("10. swapped positionId in the blob: signature still valid but the commitment check exposes the swap", async () => {
+  const st = fundedState(86n);
+  const { blob } = await createRecoveryBlob({ state: st, address: WALLET_A, chainId: CHAIN, positionId: "86", signMessage: signWith(signerA) });
+  // positionId lives in public metadata and is NOT covered by the challenge —
+  // the security backstop is the commitment comparison against on-chain state.
+  const swapped = structuredClone(blob);
+  swapped.positionId = "87";
+  const recovered = await recoverStateFromBlob({ blob: swapped, address: WALLET_A, chainId: CHAIN, signMessage: signWith(signerA) });
+  const decoyOnChain = await computeCommitment(fundedState(87n));
+  assert.notEqual(await computeCommitment(recovered), decoyOnChain, "commitment verification must catch a swapped positionId");
+});
+
+test("11. per-position recovery filename identifies the position number", async () => {
+  const { recoveryFileName } = await import("../lib/recovery/storage.ts");
+  assert.equal(recoveryFileName("1"), "VeilLend-Position-1-Recovery.json");
+  assert.equal(recoveryFileName("42"), "VeilLend-Position-42-Recovery.json");
+});

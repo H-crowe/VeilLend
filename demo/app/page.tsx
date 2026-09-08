@@ -1,9 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useDisconnect } from "wagmi";
+import { useDisconnect, usePublicClient, useSignMessage } from "wagmi";
 import { useVeilLend, type ActionKind, type TxState } from "@/hooks/useVeilLend";
-import { explorerAddress } from "@/lib/chains";
+import { explorerAddress, horizenTestnet } from "@/lib/chains";
+import { createRecoveryBlob } from "@/lib/recovery/recovery";
+import { parseRecoveryFile, verifyAndRestore } from "@/lib/recovery/restore";
+import { FileBackupStore, recoveryFileName } from "@/lib/recovery/storage";
+import { saveLastSelected, savePosition, serializeState } from "@/lib/state/store";
 import type { AssetEntry } from "@/lib/contracts/addresses";
 
 function short(a: string) { return a.slice(0, 6) + "…" + a.slice(-4); }
@@ -36,6 +40,10 @@ export default function Page() {
   useEffect(() => setMounted(true), []);
 
   const v = useVeilLend();
+  const publicClient = usePublicClient();
+  const { signMessageAsync } = useSignMessage();
+  const [recoveryBusy, setRecoveryBusy] = useState(false);
+  const [recoveryMsg, setRecoveryMsg] = useState<null | { ok: boolean; text: string }>(null);
   // Pair selection happens ONLY at position-creation time; the pair is then
   // fixed for the position's life. ZEN is locked and never listed.
   const collateralChoices = v.ASSETS.filter((a) => a.status !== "locked" && a.symbol !== "vDBT");
@@ -66,6 +74,61 @@ export default function Page() {
   function maxFor(symbol: string, decimals: number, setter: (s: string) => void) {
     const bal = v.assetBalances[symbol];
     if (bal !== undefined) setter(fmtAssetBalance(bal, decimals));
+  }
+
+  // ——— Manual recovery (reuses lib/recovery unchanged) ———
+  const signer = async (msg: string) => signMessageAsync({ message: msg });
+
+  /** Encrypted backup of the SELECTED position — one file per position. */
+  async function downloadRecoveryFile() {
+    if (!v.address || !v.selectedState || !v.selectedId || recoveryBusy) return;
+    setRecoveryBusy(true);
+    setRecoveryMsg(null);
+    try {
+      const { blob } = await createRecoveryBlob({
+        state: v.selectedState,
+        address: v.address,
+        chainId: horizenTestnet.id,
+        positionId: v.selectedId,
+        signMessage: signer,
+      });
+      const name = recoveryFileName(v.selectedId);
+      await new FileBackupStore().save(name, JSON.stringify(blob, null, 2));
+      setRecoveryMsg({
+        ok: true,
+        text: `✓ ${name} downloaded — an encrypted backup of Position #${v.selectedId}'s private state. Keep it safe: restoring requires this file and the same wallet.`,
+      });
+    } catch (e) {
+      setRecoveryMsg({ ok: false, text: `✗ Backup failed: ${(e as Error).message}` });
+    } finally {
+      setRecoveryBusy(false);
+    }
+  }
+
+  /** Restore flow: file → signature → decrypt → on-chain commitment check → restore. */
+  async function restoreRecoveryFile(file: File) {
+    if (!v.address || !publicClient || recoveryBusy) return;
+    setRecoveryBusy(true);
+    setRecoveryMsg(null);
+    try {
+      const blob = await parseRecoveryFile(file);
+      const res = await verifyAndRestore({ blob, address: v.address, chainId: horizenTestnet.id, publicClient, signMessage: signer });
+      if (res.pass && res.recovered) {
+        savePosition(v.address, { positionId: blob.positionId, state: serializeState(res.recovered), createdAt: new Date().toISOString() });
+        v.refreshPositions();
+        v.setSelectedId(blob.positionId);
+        setRecoveryMsg({
+          ok: true,
+          text: `✓ Position #${blob.positionId} restored — the recovered witness material matches the on-chain commitment. You can use the position normally.`,
+        });
+      } else {
+        setRecoveryMsg({ ok: false, text: `✗ Recovery failed: ${res.detail ?? "commitment mismatch"} — nothing was restored.` });
+      }
+    } catch (e) {
+      setRecoveryMsg({ ok: false, text: `✗ Recovery failed: ${(e as Error).message} — nothing was restored.` });
+    } finally {
+      setRecoveryBusy(false);
+    }
   }
 
   // Flow-step strip: completed steps are derived from real state.
@@ -149,11 +212,49 @@ export default function Page() {
                     <option key={p.positionId} value={p.positionId}>Position #{p.positionId}</option>
                   ))}
                 </select>
+                <button
+                  className="action-btn"
+                  disabled={recoveryBusy || !v.selectedState}
+                  onClick={() => void downloadRecoveryFile()}
+                  title="Download an encrypted recovery file for the selected position"
+                >
+                  {recoveryBusy ? "Working…" : `Download Recovery File${v.selectedId ? ` (Position #${v.selectedId})` : ""}`}
+                </button>
                 <span className="hint">Only you can open your positions — the private state lives in this browser.</span>
               </div>
             ) : (
-              <p className="hint">No positions in this browser yet — choose a pair and create your first one.</p>
+              <div style={{ marginBottom: 8 }}>
+                <p className="hint">
+                  No positions in this browser yet — create your first one below, or{" "}
+                  <strong>restore an existing position</strong> from its recovery file.
+                </p>
+                <label style={{ display: "inline-block" }}>
+                  <input
+                    type="file"
+                    accept="application/json,.json"
+                    aria-label="Restore from recovery file"
+                    disabled={recoveryBusy}
+                    onChange={(e) => { const f = e.target.files?.[0]; if (f) void restoreRecoveryFile(f); e.target.value = ""; }}
+                  />
+                </label>
+                <span className="hint" style={{ marginLeft: 8 }}>Restore from Recovery File</span>
+              </div>
             )}
+
+            {/* Manual recovery status — backup download / restore result */}
+            {recoveryMsg && (
+              <p className={recoveryMsg.ok ? "ok" : "err"} style={{ fontSize: 13, margin: "10px 0 0" }}>
+                {recoveryMsg.text}
+              </p>
+            )}
+            <div className="footnote" style={{ marginTop: 10 }}>
+              <strong>Recovery files:</strong> each position has its own encrypted file
+              (<span className="mono">VeilLend-Position-N-Recovery.json</span>), signed with your wallet and
+              restorable only by the same wallet. Restore flow: select the file → wallet signature → decrypt →
+              the recovered state is verified against the on-chain commitment before anything is restored.
+              Note: restore relies on deterministic wallet signatures — software wallets (MetaMask and
+              similar) work; hardware wallets typically sign non-deterministically and cannot restore.
+            </div>
             <div className="amount-row">
               <label style={{ flex: 1 }}><div className="hint">Collateral you will deposit (needs balance + approval in Step 1)</div>
                 <select className="select" value={collateral.symbol} onChange={(e) => setCollateralSymbol(e.target.value)} aria-label="Collateral asset">
@@ -542,17 +643,24 @@ function PricePanel({ v }: { v: ReturnType<typeof useVeilLend> }) {
             <div className="metric" key={sym}>
               <div className="label">{`${sym} / USD (Base Chainlink)`}</div>
               <div className="value" style={{ fontFamily: "var(--mono)" }}>
-                {info ? fmt(info.price1e8) : "…"}
+                {info ? (info.price1e8 !== "0" ? fmt(info.price1e8) : "—") : "…"}
               </div>
               <div className="hint">Updated: {info ? ago(info.horizenUpdatedAt) : "—"}</div>
             </div>
           );
         })}
       </div>
+      {v.relayUnreachable && (
+        <p className="warn-text" style={{ fontSize: 13, marginBottom: 10 }}>
+          The testnet price relay is not running ({"http://localhost:8787"} is unreachable), so live prices
+          cannot be displayed or pushed to the demo oracle. Start it in another terminal:
+          <span className="mono"> node relay/base-price-relay.mjs</span> — then press Refresh Prices.
+        </p>
+      )}
       <button
         className="action-btn"
         disabled={(v.tx.status !== "idle" && v.tx.status !== "confirmed" && v.tx.status !== "failed") || !v.isConnected}
-        onClick={() => v.refreshOraclePrices().catch(() => { /* surfaced via tx state */ })}
+        onClick={() => void v.refreshOraclePrices()}
       >
         Refresh Prices
       </button>

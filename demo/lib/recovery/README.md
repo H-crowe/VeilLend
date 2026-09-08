@@ -89,6 +89,22 @@ locally.
 - `FileBackupStore` is manual durability; discovery by wallet address is not
   implemented.
 
+## Main demo integration
+
+The same pipeline now runs in the main demo (`app/page.tsx`) via the shared
+`lib/recovery/restore.ts` module (`parseRecoveryFile` → `verifyAndRestore`),
+which `/recovery-test` also uses:
+
+- **Export**: every existing position offers "Download Recovery File"
+  (`recoveryFileName` → `VeilLend-Position-N-Recovery.json` — one file per
+  position, filename identifies the position number).
+- **Restore**: with no local positions the page shows a "Restore from Recovery
+  File" picker next to Create Position. Flow: file → wallet signature →
+  decrypt → recompute the Poseidon commitment → compare with the CURRENT
+  on-chain `activeCommitment` (and `Status.Active`) → only then persist and
+  select the position. Clear success/failure messages are shown, including the
+  deterministic-signature / hardware-wallet limitation.
+
 ## Deferred (explicitly out of scope for this milestone)
 
 - Registry contract mapping wallet → backup pointer/hash (only if address

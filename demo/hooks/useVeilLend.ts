@@ -348,18 +348,35 @@ export function useVeilLend() {
   }, [priceRelayUrl]);
 
   const [relayedPrices, setRelayedPrices] = useState<RelayedPrice[]>([]);
+  // Surfaced so the Price panel can explain "…" instead of silently failing
+  // when the isolated relay service (relay/base-price-relay.mjs) isn't running.
+  const [relayUnreachable, setRelayUnreachable] = useState(false);
 
   const refreshOraclePrices = useCallback(async () => {
     if (!isConnected || !address) throw new Error("wallet not connected");
     setTx({ status: "preparing" });
-    const res = await fetch(`${priceRelayUrl}/refresh`, { method: "POST" });
-    const body = (await res.json()) as { txHash?: string; error?: string };
-    if (!res.ok || !body.txHash) throw new Error(body.error ?? `price relay refresh failed (${res.status})`);
-    setTx({ status: "confirmed", txHash: body.txHash, explorerUrl: explorerTx(body.txHash), proofVerified: false });
-    setRelayedPrices(await fetchRelayPrices().catch(() => []));
+    try {
+      const res = await fetch(`${priceRelayUrl}/refresh`, { method: "POST" });
+      const body = (await res.json()) as { txHash?: string; error?: string };
+      if (!res.ok || !body.txHash) throw new Error(body.error ?? `price relay refresh failed (${res.status})`);
+      setTx({ status: "confirmed", txHash: body.txHash, explorerUrl: explorerTx(body.txHash), proofVerified: false });
+      setRelayUnreachable(false);
+      setRelayedPrices(await fetchRelayPrices().catch(() => []));
+    } catch (e) {
+      // The relay is down or errored — never leave the tx spinner stuck on
+      // "preparing"; surface an actionable failure instead.
+      setTx({
+        status: "failed",
+        error: `Price relay is not reachable at ${priceRelayUrl} — start it with: node relay/base-price-relay.mjs (${e instanceof Error ? e.message : String(e)})`,
+      });
+    }
   }, [isConnected, address, priceRelayUrl, fetchRelayPrices]);
 
-  useEffect(() => { void fetchRelayPrices().then(setRelayedPrices).catch(() => {}); }, [fetchRelayPrices, tx.status]);
+  useEffect(() => {
+    void fetchRelayPrices()
+      .then((p) => { setRelayedPrices(p); setRelayUnreachable(false); })
+      .catch(() => setRelayUnreachable(true));
+  }, [fetchRelayPrices, tx.status]);
 
   const fail = useCallback((rawErr: unknown): never => {
     const raw = rawErr instanceof Error ? rawErr.message : String(rawErr);
@@ -624,8 +641,8 @@ export function useVeilLend() {
     getWallet,
     connectorName: connectors[0]?.name ?? "Injected",
     switchChain: () => switchChain({ chainId: horizenTestnet.id }),
-    snarkReady, positions, selectedId, setSelectedId: selectPosition, selectedState,
-    onChain, refreshOnChain, oraclePrices,
+    snarkReady, positions, selectedId, setSelectedId: selectPosition, selectedState, refreshPositions,
+    onChain, refreshOnChain, oraclePrices, relayUnreachable,
     runAction, mintTestTokens, seedLiquidity, isEligible,
     tx, setTx, RISK_PARAMS, ASSETS, assetBalances, refreshAssetBalances, allowances, refreshAllowances, ensureAllowance, mintAsset, relayedPrices, refreshOraclePrices,
   };

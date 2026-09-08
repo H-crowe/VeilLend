@@ -12,15 +12,13 @@
 
 import { useState } from "react";
 import { useAccount, usePublicClient, useSignMessage } from "wagmi";
-import { createRecoveryBlob, recoverStateFromBlob, type RecoveryBlob } from "@/lib/recovery/recovery";
-import { FileBackupStore, backupFileName, loadFromFile } from "@/lib/recovery/storage";
-import { clearLocalState, saveLastSelected, savePosition, serializeState } from "@/lib/state/store";
-import { computeCommitment } from "@/lib/zk/witness";
-import { horizenTestnet, explorerAddress } from "@/lib/chains";
-import { ADDRESSES } from "@/lib/contracts/addresses";
-import { veilLendAbi } from "@/lib/contracts/abis";
-import { useVeilLend } from "@/hooks/useVeilLend";
 import type { Address } from "viem";
+import { createRecoveryBlob } from "@/lib/recovery/recovery";
+import { parseRecoveryFile, verifyAndRestore } from "@/lib/recovery/restore";
+import { FileBackupStore, backupFileName } from "@/lib/recovery/storage";
+import { clearLocalState, saveLastSelected, savePosition, serializeState } from "@/lib/state/store";
+import { horizenTestnet, explorerAddress } from "@/lib/chains";
+import { useVeilLend } from "@/hooks/useVeilLend";
 
 type Phase = "idle" | "backing-up" | "clearing" | "recovering";
 
@@ -76,25 +74,14 @@ export default function RecoveryTestPage() {
     setResult(null);
     try {
       if (!v.address || !publicClient) throw new Error("wallet not connected");
-      const blob = JSON.parse(await loadFromFile(file)) as RecoveryBlob;
-      const recovered = await recoverStateFromBlob({ blob, address: v.address, chainId: horizenTestnet.id, signMessage: signer });
+      const blob = await parseRecoveryFile(file);
+      const res = await verifyAndRestore({ blob, address: v.address, chainId: horizenTestnet.id, publicClient, signMessage: signer });
 
-      // read the CURRENT on-chain active commitment for this position
-      const raw = await publicClient.readContract({
-        address: ADDRESSES.veilLend as Address, abi: veilLendAbi, functionName: "positions", args: [BigInt(blob.positionId)],
-      }) as unknown;
-      const f: unknown[] = Array.isArray(raw) ? raw : Object.values((raw ?? {}) as Record<string, unknown>);
-      const onChainCommitment = String(f[2]);
-      const active = Number(f[5]) === 1;
-
-      const recoveredCommitment = "0x" + (await computeCommitment(recovered)).toString(16).padStart(64, "0");
-      const match = recoveredCommitment.toLowerCase() === onChainCommitment.toLowerCase();
-
-      setResult({ pass: match && active, recoveredCommitment, onChainCommitment, detail: active ? undefined : "position is not Active on-chain" });
-      if (match && active) {
+      setResult({ pass: res.pass, recoveredCommitment: res.recoveredCommitment, onChainCommitment: res.onChainCommitment, detail: res.detail });
+      if (res.pass && res.recovered) {
         // restore into the app: local store + selection, then a reload makes
         // the main page use the recovered witness material
-        savePosition(v.address, { positionId: blob.positionId, state: serializeState(recovered), createdAt: new Date().toISOString() });
+        savePosition(v.address, { positionId: blob.positionId, state: serializeState(res.recovered), createdAt: new Date().toISOString() });
         saveLastSelected(v.address, blob.positionId);
         setMessage("Recovery PASS — local state restored. Reload the app to use the recovered position.");
       } else {

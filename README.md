@@ -790,11 +790,19 @@ The original M1-era `MockPriceOracle` had an open (permissionless) `setPrice` an
 
 ### Private-State Recovery
 
-The recovery mechanism is currently a client-side prototype using encrypted backup material and wallet-derived key material.
+Manual recovery is integrated into the main demo: every position offers **Download Recovery File**
+(`VeilLend-Position-N-Recovery.json`, one encrypted file per position), and a browser with no local
+positions offers **Restore from Recovery File** — select the file, sign the domain-separated challenge,
+decrypt, and the recovered state is verified against the current on-chain commitment before anything is
+restored. It is a client-side mechanism using encrypted backup material and wallet-derived key material.
 
 It is not an on-chain recovery mechanism and does not grant additional protocol permissions.
 
-Loss of the recovery material currently means the private state cannot be reconstructed through this prototype.
+Restore relies on deterministic wallet signatures: software wallets (MetaMask and similar) work;
+hardware wallets typically sign non-deterministically and cannot restore — re-download the file instead.
+
+Loss of the recovery material means the private state cannot be reconstructed through this mechanism.
+The `/recovery-test` page remains as the developer/test flow for the same logic.
 
 ### Liquidation Bad Debt
 
