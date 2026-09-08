@@ -364,10 +364,11 @@ export function useVeilLend() {
       setRelayedPrices(await fetchRelayPrices().catch(() => []));
     } catch (e) {
       // The relay is down or errored — never leave the tx spinner stuck on
-      // "preparing"; surface an actionable failure instead.
+      // "preparing"; surface a user-friendly failure instead (operator-facing
+      // runbook details stay out of the UI).
       setTx({
         status: "failed",
-        error: `Price relay is not reachable at ${priceRelayUrl} — start it with: node relay/base-price-relay.mjs (${e instanceof Error ? e.message : String(e)})`,
+        error: `Prices unavailable — the testnet price relay is currently offline, so prices could not be refreshed (${e instanceof Error ? e.message : String(e)})`,
       });
     }
   }, [isConnected, address, priceRelayUrl, fetchRelayPrices]);

@@ -652,9 +652,9 @@ function PricePanel({ v }: { v: ReturnType<typeof useVeilLend> }) {
       </div>
       {v.relayUnreachable && (
         <p className="warn-text" style={{ fontSize: 13, marginBottom: 10 }}>
-          The testnet price relay is not running ({"http://localhost:8787"} is unreachable), so live prices
-          cannot be displayed or pushed to the demo oracle. Start it in another terminal:
-          <span className="mono"> node relay/base-price-relay.mjs</span> — then press Refresh Prices.
+          Prices unavailable — the testnet price relay is currently offline. Live testnet prices are
+          temporarily unavailable; borrowing and withdrawing need fresh prices and will fail until the
+          relay is back online.
         </p>
       )}
       <button
