@@ -390,9 +390,11 @@ The oracle includes:
 
 The testnet oracle is **not production infrastructure**.
 
-### Production Direction
+### Production Oracle Path (Stork)
 
-The **Horizen Stork oracle** is the intended PRODUCTION oracle integration and is implemented AND deployed on Horizen Testnet behind the same freshness and price-validation interface: a `StorkPriceOracle` adapter (`IPriceOracle` → real Stork push oracle at `0xacC0…d62`), official registry feed IDs — **WETH → `WETHUSD`** (`0x8afba5f1…82b8`), **USDC → `USDCUSD`** (`0x7416a56f…290c`) — and a permissionless same-transaction flow (signed Stork snapshot relayed and consumed by the user's proof in one transaction via `pushOracleUpdate`).
+The **Horizen Stork oracle** is the production oracle path and is implemented, configured, and deployed on Horizen Testnet behind the same freshness and price-validation interface: the **`StorkPriceOracle` adapter is deployed** (`IPriceOracle` → the real Stork push oracle at `0xacC0…d62`), the official registry feeds are configured — **WETH → `WETHUSD`** (`0x8afba5f1…82b8`), **USDC → `USDCUSD`** (`0x7416a56f…290c`) — and the permissionless same-transaction flow exists (`pushOracleUpdate`: a signed Stork snapshot is relayed and consumed by the user's proof in one transaction).
+
+What is **not yet active** is live Stork testnet publishing/relaying: no subscriber relayer is pushing signed WETHUSD/USDCUSD observations to Horizen testnet yet (Stork's data API requires subscriber credentials). Stork has not been replaced or removed — when publishing starts, the deployment's live price path switches to Stork.
 
 Production price path (intended):
 
@@ -698,17 +700,7 @@ See `.env.example` for the expected configuration.
 
 ## Built vs. Future
 
-### Already Built (oracle-relevant additions)
-
-* Stork production oracle path implemented and deployed on Testnet:
-  `StorkPriceOracle` adapter wired to the real Stork push oracle with the
-  official **WETHUSD / USDCUSD** feeds and permissionless
-  `pushOracleUpdate` (activation awaits Stork testnet publishing);
-* Testnet/Demo price relay: Base Chainlink → owner-gated
-  `OwnerMockPriceOracle` (**TESTNET/DEMO ONLY**, isolated in `relay/`);
-* UUPS upgradeable deployment (owner-only `_authorizeUpgrade`);
-* WETH (18) / USDC (6) enabled with decimal-normalized, value-based risk
-  accounting — a real WETH/USDC lifecycle executed on-chain.
+### Already Built
 
 * Poseidon-based private state commitments;
 * Groth16 zero-knowledge proofs;
@@ -725,7 +717,16 @@ See `.env.example` for the expected configuration.
 * borrow-outstanding accounting;
 * oracle freshness enforcement;
 * public debt-index interest mechanics;
-* Horizen testnet deployment;
+* the **current UUPS/ERC-1967 testnet deployment** (owner-only
+  `_authorizeUpgrade`);
+* the **Stork production oracle path**: `StorkPriceOracle` adapter deployed
+  and wired to the real Stork push oracle with the official
+  **WETHUSD / USDCUSD** feeds and permissionless `pushOracleUpdate`
+  (activation awaits Stork testnet publishing);
+* the **Testnet/Demo price relay**: Base Chainlink → owner-gated
+  `OwnerMockPriceOracle` (**TESTNET/DEMO ONLY**, isolated in `relay/`);
+* **WETH (18) / USDC (6)** enabled with decimal-normalized, value-based risk
+  accounting — a real WETH/USDC lifecycle executed on-chain;
 * working browser frontend;
 * encrypted private-state recovery prototype.
 
@@ -770,11 +771,11 @@ A production deployment requires additional security review and audit work.
 
 ### Testnet Deployment Model
 
-The **currently live** testnet deployment uses immutable verifier addresses and a non-upgradeable protocol contract (the fixed M1 deployment recorded in `deployments/horizenTestnet.json`).
+The **currently live official testnet deployment is the UUPS/ERC-1967 deployment**: proxy `0xc1e2cDADBf14717DfEE7ffA23EAf2b21e6004a5B` → implementation `0x353EcfaFa07a60f1Ed473ed4cE3F1c2624fF7aa5`, with owner-only `_authorizeUpgrade` (record: `deployments/horizenTestnet-uups.json`).
 
-The **repository code** has since been deployed as a NEW, separate UUPS upgradeable deployment — the current official Testnet deployment (ERC-1967 proxy `0xc1e2cDADBf14717DfEE7ffA23EAf2b21e6004a5B` → implementation `0x353EcfaFa07a60f1Ed473ed4cE3F1c2624fF7aa5`, owner-only `_authorizeUpgrade`; record in `deployments/horizenTestnet-uups.json`). The M1 deployment above was never upgraded and remains historical.
+The fixed M1 deployment (immutable verifier addresses, non-upgradeable contract, recorded in `deployments/horizenTestnet.json`) is **historical and superseded** — it was never upgraded; the UUPS proxy is a separate, newer deployment.
 
-Production upgrade governance, emergency process, and recovery mechanics remain open M2 work.
+Production upgrade governance (multisig/timelock), emergency process, and recovery mechanics remain open M2 work.
 
 ### Testnet / Demo Price Source — Base Chainlink → Mock Oracle
 
