@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAccount, useConnect, usePublicClient, useSwitchChain, useWalletClient } from "wagmi";
 import { getWalletClient as getWagmiWalletClient } from "@wagmi/core";
 import { encodeFunctionData, getAddress, type Address } from "viem";
+import { ethers } from "ethers";
 import { horizenTestnet, explorerTx } from "../lib/chains";
 import { ADDRESSES, ASSETS } from "../lib/contracts/addresses";
 import { veilLendAbi, tokenAbi, oracleAbi } from "../lib/contracts/abis";
@@ -18,6 +19,7 @@ import { assertReceiptSuccess } from "../lib/tx/receipt";
 import { deserializeState, serializeState, listPositions, savePosition, getPosition, saveLastSelected, getLastSelected, type StoredPosition } from "../lib/state/store";
 import { wagmiConfig } from "../app/providers";
 
+const ethersAbi = ethers.AbiCoder.defaultAbiCoder();
 const WAD = 10n ** 18n;
 const PRICE_SCALE = 10n ** 8n;
 const BPS = 10000n;
@@ -236,6 +238,64 @@ export function useVeilLend() {
     throw new Error("wallet not connected");
   }, [walletClientData, connectedConnector]);
 
+  /** ERC20 allowance(user -> VeilLend) per asset symbol. Part of the guided
+   *  setup step: actions that pull tokens are blocked until approved. */
+  const [allowances, setAllowances] = useState<Record<string, bigint>>({});
+  const refreshAllowances = useCallback(async () => {
+    if (!publicClient || !address) { setAllowances({}); return; }
+    const entries = await Promise.all(ASSETS.filter((a) => a.address !== "").map(async (a) => {
+      try {
+        const al = (await publicClient.readContract({
+          address: a.address as Address, abi: tokenAbi,
+          functionName: "allowance", args: [address, ADDRESSES.veilLend as Address],
+        })) as bigint;
+        return [a.symbol, al] as const;
+      } catch { return [a.symbol, 0n] as const; }
+    }));
+    setAllowances(Object.fromEntries(entries));
+  }, [publicClient, address]);
+  useEffect(() => { void refreshAllowances(); }, [refreshAllowances, tx.status]);
+
+  /**
+   * Approve VeilLend to spend `amount` of `assetAddr` (MaxUint256). Sends the
+   * approve transaction only when the current allowance is insufficient.
+   * Returns the approve tx hash when an approval was sent, else null.
+   */
+  const ensureAllowance = useCallback(async (assetAddr: string, amount: bigint): Promise<string | null> => {
+    if (!isConnected || !address) throw new Error("wallet not connected");
+    const walletClient = await getWallet();
+    const current = (await publicClient!.readContract({ address: assetAddr as Address, abi: tokenAbi, functionName: "allowance", args: [address, ADDRESSES.veilLend as Address] })) as bigint;
+    if (current >= amount) return null;
+    setTx({ status: "wallet" });
+    const hash = await walletClient.writeContract({ address: assetAddr as Address, abi: tokenAbi, functionName: "approve", args: [ADDRESSES.veilLend as Address, 2n ** 256n - 1n] });
+    setTx((t) => ({ ...t, status: "confirming", txHash: hash }));
+    const rec = await publicClient!.waitForTransactionReceipt({ hash });
+    assertReceiptSuccess(rec.status, hash);
+    await refreshAllowances();
+    return hash;
+  }, [getWallet, isConnected, address, publicClient, refreshAllowances]);
+
+  /** Mint any mock testnet asset. WETH is wrapped from chain ETH instead. */
+  const mintAsset = useCallback(async (symbol: string, amount: bigint) => {
+    if (!isConnected || !address) throw new Error("wallet not connected");
+    const walletClient = await getWallet();
+    const entry = ASSETS.find((a) => a.symbol === symbol);
+    if (!entry || entry.address === "") throw new Error("unknown asset " + symbol);
+    setTx({ status: "wallet" });
+    let hash: `0x${string}`;
+    if (symbol === "WETH") {
+      hash = await walletClient.writeContract({ address: entry.address as Address, abi: tokenAbi, functionName: "deposit", args: [], value: amount });
+    } else {
+      hash = await walletClient.writeContract({ address: entry.address as Address, abi: tokenAbi, functionName: "mint", args: [address, amount] });
+    }
+    setTx((t) => ({ ...t, status: "confirming", txHash: hash }));
+    const rec = await publicClient!.waitForTransactionReceipt({ hash });
+    assertReceiptSuccess(rec.status, hash);
+    setTx({ status: "confirmed", txHash: hash, explorerUrl: explorerTx(hash), proofVerified: false });
+    await refreshAssetBalances();
+  }, [getWallet, isConnected, address, publicClient, refreshAssetBalances]);
+
+
   /**
    * Risk actions (borrow/withdraw/liquidate) read prices with an on-chain
    * freshness check — a stale mock-oracle price makes them revert with
@@ -303,9 +363,22 @@ export function useVeilLend() {
 
   useEffect(() => { void fetchRelayPrices().then(setRelayedPrices).catch(() => {}); }, [fetchRelayPrices, tx.status]);
 
-  const fail = useCallback((err: unknown): never => {
-    const raw = err instanceof Error ? err.message : String(err);
+  const fail = useCallback((rawErr: unknown): never => {
+    const raw = rawErr instanceof Error ? rawErr.message : String(rawErr);
     let msg = raw;
+    // Decode revert data carried by provider/wallet errors (viem/ethers wrap
+    // it in err.data / err.info.error.data depending on the layer).
+    const eAny = rawErr as { data?: string; info?: { error?: { data?: string } } };
+    const revertData = eAny?.data ?? eAny?.info?.error?.data;
+    if (typeof revertData === "string" && revertData.startsWith("0x") && revertData.length >= 10) {
+      const sel = revertData.slice(0, 10);
+      const args = "0x" + revertData.slice(10);
+      try {
+        const dec = ethersAbi.decode(["address", "uint256", "uint256"], args);
+        if (sel === "0xfb8f41b2") msg = "Token approval missing — approve the token first (allowance " + dec[1].toString() + " < needed " + dec[2].toString() + "). Use the Approve button in Setup.";
+        if (sel === "0xe450d38c") msg = "Token balance too low (have " + dec[1].toString() + ", needed " + dec[2].toString() + "). Mint or top up the asset in Setup first.";
+      } catch { /* not this error shape */ }
+    }
     if (/Chain.*mismatch|chainId|wrong network/i.test(raw)) msg = "Wrong network — switch to Horizen Testnet";
     else if (/User rejected|denied/i.test(raw)) msg = "Transaction rejected in wallet";
     else if (/insufficient funds|exceeds balance|insufficient balance/i.test(raw)) msg = "Insufficient testnet balance";
@@ -326,7 +399,7 @@ export function useVeilLend() {
       }
       return { status: "failed", error: msg, label: raw.slice(0, 140) };
     });
-    throw err;
+    throw rawErr;
   }, []);
 
   const proveAndSubmit = useCallback(async (
@@ -423,6 +496,18 @@ export function useVeilLend() {
       if (kind === "deposit" || kind === "repay") {
         const amount = amt ?? 0n;
         if (amount === 0n) throw new Error("Enter an amount");
+        // Token prerequisites: the pulled token is the position's collateral
+        // (deposit) or debt (repay) asset — fixed at position creation.
+        const pullToken = kind === "deposit" ? collateralAddr : debtAddr;
+        const pullSymbol = ASSETS.find((a) => a.address.toLowerCase() === pullToken.toLowerCase())?.symbol ?? "asset";
+        if (kind === "repay") {
+          const onPos = await readOnChainPosition(positionId);
+          const outstanding = onPos ? onPos.outstanding : 0n;
+          if (st.debt === 0n && outstanding === 0n) throw new Error("This position has no debt to repay");
+        }
+        const bal = (await publicClient.readContract({ address: pullToken as Address, abi: tokenAbi, functionName: "balanceOf", args: [address] })) as bigint;
+        if (bal < amount) throw new Error(pullSymbol + " balance too low: you hold " + bal + " and this " + kind + " needs " + amount + ". Mint or top up the asset in the Setup step first.");
+        await ensureAllowance(pullToken, amount);
         const actionId = kind === "deposit" ? ACTION_DEPOSIT : 2n;
         const t = await buildTransition({ oldState: st, actionId, amount, currentIndex, newSalt });
         const res = await proveAndSubmit(fnFor(kind), "state_transition", t.publicSignals, t.inputs, walletClient);
@@ -544,7 +629,7 @@ export function useVeilLend() {
     snarkReady, positions, selectedId, setSelectedId: selectPosition, selectedState,
     onChain, refreshOnChain, oraclePrices,
     runAction, mintTestTokens, seedLiquidity, isEligible,
-    tx, setTx, RISK_PARAMS, ASSETS, assetBalances, refreshAssetBalances, relayedPrices, refreshOraclePrices,
+    tx, setTx, RISK_PARAMS, ASSETS, assetBalances, refreshAssetBalances, allowances, refreshAllowances, ensureAllowance, mintAsset, relayedPrices, refreshOraclePrices,
   };
 }
 

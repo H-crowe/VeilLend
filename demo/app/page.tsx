@@ -24,8 +24,8 @@ function assetByAddress(assets: readonly AssetEntry[], addr: string): AssetEntry
   );
 }
 
-/** The six steps of the demo's primary user flow. */
-const FLOW_STEPS = ["Connect", "Create", "Deposit", "Borrow", "Repay", "Withdraw"] as const;
+/** The guided demo flow steps. */
+const FLOW_STEPS = ["Connect", "Setup", "Create", "Deposit", "Borrow", "Repay", "Withdraw"] as const;
 
 export default function Page() {
   // wagmi restores wallet state from localStorage during the first client
@@ -37,8 +37,7 @@ export default function Page() {
 
   const v = useVeilLend();
   // Pair selection happens ONLY at position-creation time; the pair is then
-  // fixed for the position's life. Pending assets (WETH/USDC on the current
-  // M1 deployment) are visible but disabled. ZEN is locked and never listed.
+  // fixed for the position's life. ZEN is locked and never listed.
   const collateralChoices = v.ASSETS.filter((a) => a.status !== "locked" && a.symbol !== "vDBT");
   const debtChoices = v.ASSETS.filter((a) => a.status !== "locked" && a.symbol !== "vCOL" && a.symbol !== "WETH");
   const [collateralSymbol, setCollateralSymbol] = useState("vCOL");
@@ -72,9 +71,9 @@ export default function Page() {
   // Flow-step strip: completed steps are derived from real state.
   const flowProgress = ((): number => {
     if (!v.isConnected) return 0;
-    if (v.positions.length === 0) return 1;
-    if (!oc || oc.status !== 1) return 2;
-    return 3;
+    if (v.positions.length === 0) return 2;
+    if (!oc || oc.status !== 1) return 3;
+    return 4;
   })();
 
   if (!mounted) {
@@ -125,11 +124,13 @@ export default function Page() {
       ) : (
         <>
           <FlowStrip step={flowProgress} />
-          <PricePanel v={v} />
 
-          {/* 1 — positions list + creation (pair is chosen here, once) */}
+          {/* STEP 1 — setup: balances, minting, approvals */}
+          <SetupPanel v={v} />
+
+          {/* STEP 2 — create a position (pair is chosen here, once) */}
           <section className="panel">
-            <div className="panel-title">1 · Create a position</div>
+            <div className="panel-title">2 · Create a position</div>
             <p className="plain" style={{ marginBottom: 12 }}>
               A position holds <strong>one collateral asset</strong> and <strong>one debt asset</strong> —
               you choose the pair below and it stays fixed for the life of the position. Your collateral,
@@ -154,11 +155,11 @@ export default function Page() {
               <p className="hint">No positions in this browser yet — choose a pair and create your first one.</p>
             )}
             <div className="amount-row">
-              <label style={{ flex: 1 }}><div className="hint">Collateral you will deposit</div>
+              <label style={{ flex: 1 }}><div className="hint">Collateral you will deposit (needs balance + approval in Step 1)</div>
                 <select className="select" value={collateral.symbol} onChange={(e) => setCollateralSymbol(e.target.value)} aria-label="Collateral asset">
                   {collateralChoices.map((a) => (
                     <option key={a.symbol} value={a.symbol} disabled={a.status !== "active"}>
-                      {`${a.symbol}${a.status === "active" ? "" : " — available after next Testnet deployment"}`}
+                      {`${a.symbol}${a.status === "active" ? "" : " — not yet enabled"}`}
                     </option>
                   ))}
                 </select>
@@ -167,7 +168,7 @@ export default function Page() {
                 <select className="select" value={debt.symbol} onChange={(e) => setDebtSymbol(e.target.value)} aria-label="Debt asset">
                   {debtChoices.map((a) => (
                     <option key={a.symbol} value={a.symbol} disabled={a.status !== "active"}>
-                      {`${a.symbol}${a.status === "active" ? "" : " — available after next Testnet deployment"}`}
+                      {`${a.symbol}${a.status === "active" ? "" : " — not yet enabled"}`}
                     </option>
                   ))}
                 </select>
@@ -181,17 +182,15 @@ export default function Page() {
             </div>
           </section>
 
-          {/* 2..6 — position card */}
+          {/* STEP 3 — position lifecycle */}
           {v.selectedId && oc && posCollateral && posDebt && (
             <section className="panel">
-              <div className="panel-title">Position #{v.selectedId}</div>
+              <div className="panel-title">3 · Position #{v.selectedId} — deposit, borrow, repay, withdraw</div>
               <div style={{ display: "flex", gap: 14, alignItems: "center", marginBottom: 14 }}>
                 <span className="status-dot" style={oc.status !== 1 ? { background: "var(--text-dim)" } : undefined} />
                 <span className="mono">{oc.status === 1 ? "ACTIVE" : oc.status === 2 ? "CLOSED" : "—"}</span>
                 <span className="hint">
                   Pair: {posCollateral.symbol} as collateral · {posDebt.symbol} as debt
-                  {posCollateral.status === "pending" || posDebt.status === "pending"
-                    ? " (not yet enabled)" : ""}
                 </span>
               </div>
               <div className="pos-row">
@@ -204,7 +203,7 @@ export default function Page() {
                 this device) can see how much you deposited or owe.
               </p>
 
-              {/* Deposit / Withdraw */}
+              {/* Deposit / Withdraw — collateral asset */}
               <div className="amount-row">
                 <label style={{ flex: 2 }}><div className="hint">{`Amount (${posCollateral.symbol}) — used by both actions`}</div>
                   <input type="text" value={amountDeposit} onChange={(e) => { setAmountDeposit(e.target.value); setAmountWithdraw(e.target.value); }} aria-label={`Deposit or withdraw amount in ${posCollateral.symbol}`} />
@@ -222,8 +221,12 @@ export default function Page() {
                 <button className="action-btn primary" disabled={disabled} onClick={() => act("deposit", amountDeposit, posCollateral.decimals)}>Deposit {posCollateral.symbol}</button>
                 <button className="action-btn" disabled={disabled} onClick={() => act("withdraw", amountWithdraw, posCollateral.decimals)}>Withdraw {posCollateral.symbol}</button>
               </div>
+              <div className="hint">
+                Deposit needs: {posCollateral.symbol} balance + approval (Step 1). Withdraw needs: hidden
+                collateral to cover the amount. The approval is requested automatically if missing.
+              </div>
 
-              {/* Borrow / Repay */}
+              {/* Borrow / Repay — debt asset */}
               <div className="amount-row" style={{ marginTop: 16 }}>
                 <label style={{ flex: 2 }}><div className="hint">{`Amount (${posDebt.symbol}) — used by both actions`}</div>
                   <input type="text" value={amountBorrow} onChange={(e) => { setAmountBorrow(e.target.value); setAmountRepay(e.target.value); }} aria-label={`Borrow or repay amount in ${posDebt.symbol}`} />
@@ -241,6 +244,11 @@ export default function Page() {
                 <button className="action-btn primary" disabled={disabled} onClick={() => act("borrow", amountBorrow, posDebt.decimals)}>Borrow {posDebt.symbol}</button>
                 <button className="action-btn" disabled={disabled} onClick={() => act("repay", amountRepay, posDebt.decimals)}>Repay {posDebt.symbol}</button>
               </div>
+              <div className="hint">
+                Borrow needs: fresh oracle prices + reserve liquidity (Seed liquidity in Testnet tools if
+                empty) + 75% LTV. Repay needs: {posDebt.symbol} balance + approval (auto-requested) and
+                existing debt.
+              </div>
 
               <div className="two-col" style={{ marginTop: 14 }}>
                 <div className="hint">{`Public on-chain: collateral value backing borrows — ${fmtAssetBalance(oc.supported, posCollateral.decimals)} ${posCollateral.symbol}`}</div>
@@ -252,22 +260,23 @@ export default function Page() {
                 with different decimals (like WETH and USDC) are valued exactly in dollar terms.
               </div>
               <div className="footnote">
-                Prices: every action uses a fresh signed market snapshot (Stork). The snapshot and your
-                zero-knowledge proof travel in the same transaction — no separate “refresh prices” step is
-                part of the user flow.
+                Prices: risk actions use the current testnet oracle (see the Testnet/Demo price source
+                below); if prices go stale, use Refresh Prices there first.
               </div>
             </section>
           )}
 
           {v.selectedId && <ProofStatus tx={v.tx} commitment={oc?.activeCommitment} sequence={oc?.sequence} snarkReady={v.snarkReady} />}
 
+          {/* STEP 4 — self-liquidation */}
           {v.selectedId && oc && oc.status === 1 && (
             <section className="panel">
-              <div className="panel-title">Self-liquidation (private)</div>
+              <div className="panel-title">4 · Self-liquidation (private)</div>
               <p style={{ color: "var(--text-secondary)", fontSize: 13, marginBottom: 12 }}>
                 When a position becomes undercollateralized it can be liquidated. VeilLend proves the
                 condition in zero knowledge — the hidden amounts are never revealed. In this demo the
-                position owner can run that proof on their own position.
+                position owner can run that proof on their own position. Prerequisites: the position must
+                actually be undercollateralized at current oracle prices.
               </p>
               {v.isEligible === null ? (
                 <p className="hint">Load this position&apos;s private state in this browser to evaluate eligibility.</p>
@@ -284,7 +293,26 @@ export default function Page() {
             </section>
           )}
 
-          {/* reference — what exists and what is coming */}
+          {/* FINAL VERIFICATION — public on-chain state of the selected position */}
+          {v.selectedId && oc && posCollateral && posDebt && (
+            <section className="panel">
+              <div className="panel-title">Final position state (public on-chain data)</div>
+              <div className="proof-box" style={{ marginTop: 0 }}>
+                <div className="row"><span className="k">status</span><span>{oc.status === 1 ? "ACTIVE" : oc.status === 2 ? "CLOSED" : "—"}</span></div>
+                <div className="row"><span className="k">sequence (transitions)</span><span>{oc.sequence.toString()}</span></div>
+                <div className="row"><span className="k">active commitment</span><span>{short(oc.activeCommitment)}</span></div>
+                <div className="row"><span className="k">collateral backing borrows</span><span>{`${fmtAssetBalance(oc.supported, posCollateral.decimals)} ${posCollateral.symbol}`}</span></div>
+                <div className="row"><span className="k">borrows drawn</span><span>{`${fmtAssetBalance(oc.outstanding, posDebt.decimals)} ${posDebt.symbol}`}</span></div>
+                <div className="row"><span className="k">hidden collateral / debt / health</span><span>🔒 private — never on-chain</span></div>
+              </div>
+              <div className="footnote">
+                Private amounts live only in this browser. The chain stores commitments, sequences, and
+                public accounting — verifiable by anyone, readable by no one.
+              </div>
+            </section>
+          )}
+
+          {/* reference — supported assets */}
           <section className="panel">
             <div className="panel-title">Supported assets</div>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
@@ -292,7 +320,7 @@ export default function Page() {
                 <tr style={{ textAlign: "left", color: "var(--muted, #888)" }}>
                   <th style={{ padding: "4px 8px" }}>Asset</th>
                   <th style={{ padding: "4px 8px" }}>Role</th>
-                  <th style={{ padding: "4px 8px" }}>Your balance</th>
+                  <th style={{ padding: "4px 8px" }}>Decimals</th>
                   <th style={{ padding: "4px 8px" }}>Price source</th>
                   <th style={{ padding: "4px 8px" }}>Status</th>
                 </tr>
@@ -305,9 +333,7 @@ export default function Page() {
                       {a.address ? <span style={{ color: "var(--muted, #888)" }}> · {a.address.slice(0, 8)}…</span> : null}
                     </td>
                     <td style={{ padding: "4px 8px" }}>{a.symbol === "vCOL" || a.symbol === "WETH" ? "Collateral" : a.symbol === "ZEN" ? "—" : "Debt"}</td>
-                    <td style={{ padding: "4px 8px" }}>
-                      {a.status === "locked" ? "—" : (v.assetBalances[a.symbol] !== undefined ? fmtAssetBalance(v.assetBalances[a.symbol], a.decimals) : "…")}
-                    </td>
+                    <td style={{ padding: "4px 8px" }}>{a.decimals}</td>
                     <td style={{ padding: "4px 8px" }}>{a.storkFeedId ? "Stork (live prices)" : "Mock oracle"}</td>
                     <td style={{ padding: "4px 8px" }}>
                       {a.status === "active" ? <span style={{ color: "var(--accent)" }}>Usable now</span>
@@ -326,18 +352,19 @@ export default function Page() {
             </div>
           </section>
 
+          {/* ——— testnet/demo price source ——— */}
+          <PricePanel v={v} />
+
           {/* ——— developer / testnet-only tools: clearly separated ——— */}
           <hr className="divider" />
           <p className="devtools-label">Developer tools — Testnet only, not part of the user flow</p>
           <section className="panel devtools">
-            <div className="panel-title">Testnet assets (test-only)</div>
+            <div className="panel-title">Testnet tools (test-only)</div>
             <p style={{ color: "var(--text-secondary)", fontSize: 13, marginBottom: 12 }}>
-              vCOL and vDBT are demo mock tokens. These buttons mint them, pre-fund the borrow reserve, and
-              push mock oracle prices — conveniences for testing that real users would never need.
+              Pre-fund the borrow reserve with demo tokens — a convenience for testing that real users
+              would never need (minting and approvals now live in Step 1 above).
             </p>
-            <div className="actions" style={{ gridTemplateColumns: "1fr 1fr 1fr 1fr" }}>
-              <button className="action-btn" disabled={busy || !v.isConnected} onClick={() => v.mintTestTokens("vCOL", 100n * 10n ** 18n)}>Mint 100 vCOL</button>
-              <button className="action-btn" disabled={busy || !v.isConnected} onClick={() => v.mintTestTokens("vDBT", 50n * 10n ** 18n)}>Mint 50 vDBT</button>
+            <div className="actions" style={{ gridTemplateColumns: "1fr" }}>
               <button className="action-btn" disabled={busy || !v.isConnected} onClick={() => v.seedLiquidity(20n * 10n ** 18n)}>Seed 20 vDBT liquidity</button>
             </div>
             <div className="footnote">
@@ -396,7 +423,7 @@ function Header({ v }: { v: ReturnType<typeof useVeilLend> }) {
   );
 }
 
-/** Compact progress strip for the primary flow: Connect → Create → Deposit → Borrow → Repay → Withdraw. */
+/** Compact progress strip for the guided flow. */
 function FlowStrip({ step }: { step: number }) {
   return (
     <div className="flow-strip" aria-label="Demo flow progress">
@@ -406,6 +433,93 @@ function FlowStrip({ step }: { step: number }) {
         </span>
       ))}
     </div>
+  );
+}
+
+/** STEP 1 — Testnet assets: balances, minting, approvals. */
+function SetupPanel({ v }: { v: ReturnType<typeof useVeilLend> }) {
+  const [mintAmounts, setMintAmounts] = useState<Record<string, string>>({});
+  const setupAssets = v.ASSETS.filter((a) => a.status !== "locked" && a.address !== "");
+  const defaults: Record<string, string> = { vCOL: "100", vDBT: "100", WETH: "0.05", USDC: "10000" };
+  const busy = v.tx.status !== "idle" && v.tx.status !== "confirmed" && v.tx.status !== "failed";
+
+  function mint(symbol: string, decimals: number) {
+    const raw = (mintAmounts[symbol] ?? defaults[symbol] ?? "0").trim();
+    const amt = parseAmount(raw, decimals);
+    if (amt === 0n) return;
+    v.mintAsset(symbol, amt).catch(() => { /* surfaced via tx state */ });
+  }
+  function approve(symbol: string) {
+    const a = v.ASSETS.find((x) => x.symbol === symbol);
+    if (!a || a.address === "") return;
+    v.ensureAllowance(a.address, 2n ** 256n - 1n).catch(() => { /* surfaced via tx state */ });
+  }
+
+  return (
+    <section className="panel">
+      <div className="panel-title">1 · Testnet assets — balances, minting, approvals</div>
+      <p className="plain" style={{ marginBottom: 12 }}>
+        Setup for everything that follows: each action pulls a specific token. Mint what you need, then
+        approve VeilLend to move it (one signature per asset). The exact required asset for each position
+        action is shown in Step 3. vDBT also needs reserve liquidity for borrows — use
+        &quot;Seed liquidity&quot; in the Testnet tools below.
+      </p>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+        <thead>
+          <tr style={{ textAlign: "left", color: "var(--muted, #888)" }}>
+            <th style={{ padding: "4px 8px" }}>Asset</th>
+            <th style={{ padding: "4px 8px" }}>Wallet balance</th>
+            <th style={{ padding: "4px 8px" }}>Mint / wrap</th>
+            <th style={{ padding: "4px 8px" }}>Approval for VeilLend</th>
+            <th style={{ padding: "4px 8px" }}>Approve</th>
+          </tr>
+        </thead>
+        <tbody>
+          {setupAssets.map((a) => {
+            const bal = v.assetBalances[a.symbol];
+            const al = v.allowances[a.symbol];
+            const approved = al !== undefined && al > 0n;
+            return (
+              <tr key={a.symbol} style={{ borderTop: "1px solid rgba(128,128,128,0.25)" }}>
+                <td style={{ padding: "6px 8px" }}><strong>{a.symbol}</strong> <span className="hint">({a.decimals} decimals)</span></td>
+                <td style={{ padding: "6px 8px" }}>{bal !== undefined ? fmtAssetBalance(bal, a.decimals) : "…"}</td>
+                <td style={{ padding: "6px 8px" }}>
+                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <input
+                      type="text"
+                      style={{ width: 110, padding: "6px 8px" }}
+                      value={mintAmounts[a.symbol] ?? defaults[a.symbol] ?? ""}
+                      onChange={(e) => setMintAmounts((m) => ({ ...m, [a.symbol]: e.target.value }))}
+                      aria-label={`Amount of ${a.symbol} to mint`}
+                    />
+                    <button className="action-btn" style={{ padding: "6px 10px" }} disabled={busy || !v.isConnected}
+                      onClick={() => mint(a.symbol, a.decimals)}>
+                      {a.symbol === "WETH" ? "Wrap ETH" : "Mint"}
+                    </button>
+                  </div>
+                </td>
+                <td style={{ padding: "6px 8px" }} className="mono">
+                  {al !== undefined ? (approved ? <span style={{ color: "var(--accent)" }}>✓ approved</span> : al.toString()) : "…"}
+                </td>
+                <td style={{ padding: "6px 8px" }}>
+                  <button className="action-btn" style={{ padding: "6px 10px" }}
+                    disabled={busy || !v.isConnected || approved}
+                    onClick={() => approve(a.symbol)}
+                    title={approved ? "Already approved" : "Approve VeilLend to move this token (required before deposit/repay)"}>
+                    {approved ? "Approved" : "Approve"}
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <div className="footnote">
+        Approvals are also requested automatically right before a Deposit/Repay if missing — the buttons
+        above let you grant them proactively. WETH is wrapped from chain ETH (the mint amount is the ETH
+        value). ZEN is locked and not shown (no ZEN/USD Stork feed).
+      </div>
+    </section>
   );
 }
 
@@ -443,8 +557,8 @@ function PricePanel({ v }: { v: ReturnType<typeof useVeilLend> }) {
         Refresh Prices
       </button>
       <div className="footnote">
-        Refresh asks the relay to fetch the latest Base Chainlink prices and update the testnet oracle
-        (one owner-signed transaction). Prices cannot be entered or chosen manually.
+        Risk actions (borrow/withdraw/liquidate) need fresh prices — if they revert with a staleness
+        error, press Refresh Prices here and retry.
       </div>
     </section>
   );
