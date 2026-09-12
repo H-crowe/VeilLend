@@ -27,11 +27,16 @@ const { signMessage } = await import("viem/accounts");
 const { verifyMessage } = await import("viem");
 
 // The wallet used by the demo's automated flows (same account as the
-// testnet deployer). The PRIVATE KEY is read from the root .env — never printed.
+// testnet deployer). The PRIVATE KEY is read from the root .env when present;
+// on CI (no .env) an ephemeral random key is derived instead — the determinism
+// properties under test are key-agnostic. The key is never printed.
 const ROOT_ENV = path.join(__dirname, "..", "..", ".env");
-const envLine = require("fs").readFileSync(ROOT_ENV, "utf8").split(/\r?\n/).find((l: string) => l.startsWith("HORIZEN_TESTNET_PRIVATE_KEY="));
-if (!envLine) throw new Error("no HORIZEN_TESTNET_PRIVATE_KEY in root .env");
-const PK = envLine.split("=")[1].trim() as `0x${string}`;
+const envLine = require("fs").existsSync(ROOT_ENV)
+  ? require("fs").readFileSync(ROOT_ENV, "utf8").split(/\r?\n/).find((l: string) => l.startsWith("HORIZEN_TESTNET_PRIVATE_KEY="))
+  : undefined;
+const PK: `0x${string}` = envLine
+  ? (envLine.split("=")[1].trim() as `0x${string}`)
+  : await import("viem/accounts").then((m) => m.generatePrivateKey());
 const ADDRESS = (() => {
   // derive public address without printing the key
   const { privateKeyToAccount } = require("viem/accounts");
