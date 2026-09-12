@@ -3,7 +3,32 @@ name: CI
 on:
   push:
     branches: [main]
+    paths:
+      - 'contracts/**'
+      - 'test/**'
+      - 'scripts/**'
+      - 'demo/**'
+      - 'circuits/**'
+      - 'tools/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'hardhat.config.ts'
+      - 'tsconfig.json'
+      - '.github/workflows/ci.yml'
+
   pull_request:
+    paths:
+      - 'contracts/**'
+      - 'test/**'
+      - 'scripts/**'
+      - 'demo/**'
+      - 'circuits/**'
+      - 'tools/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'hardhat.config.ts'
+      - 'tsconfig.json'
+      - '.github/workflows/ci.yml'
 
 jobs:
   contracts:
