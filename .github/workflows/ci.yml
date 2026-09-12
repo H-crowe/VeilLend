@@ -19,6 +19,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install Circom 2.1.6 (linux-amd64)
+        run: |
+          curl -fsSL -o /usr/local/bin/circom https://github.com/iden3/circom/releases/download/v2.1.6/circom-linux-amd64
+          chmod +x /usr/local/bin/circom
+          circom --version
+
+      - name: Build ZK artifacts (circuits → wasm/zkey)
+        run: npm run zk:build
+
       - name: Compile contracts
         run: npx hardhat compile
 
