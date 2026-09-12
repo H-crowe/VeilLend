@@ -47,21 +47,85 @@ export interface ProofResult {
   callArgs: { pA: [bigint, bigint]; pB: [[bigint, bigint], [bigint, bigint]]; pC: [bigint, bigint]; pub: bigint[] };
 }
 
-/** Generates a real Groth16 proof in the browser. */
+// ---------------------------------------------------------------------------
+// Web Worker proving — keeps the UI responsive during multi-second proofs.
+// Falls back transparently to main-thread proving when workers are
+// unavailable (SSR, old browsers) or when the worker itself fails.
+// ---------------------------------------------------------------------------
+
+let worker: Worker | null = null;
+let workerBroken = false;
+let nextJobId = 1;
+const pendingJobs = new Map<number, { resolve: (p: { proof: Groth16Proof; publicSignals: string[] }) => void; reject: (e: Error) => void }>();
+
+function getWorker(): Worker | null {
+  if (workerBroken || typeof Worker === "undefined") return null;
+  if (!worker) {
+    try {
+      worker = new Worker("/zk-worker.js");
+      worker.onmessage = (ev: MessageEvent) => {
+        const { id, ok, proof, publicSignals, error } = ev.data || {};
+        const job = pendingJobs.get(id);
+        if (!job) return;
+        pendingJobs.delete(id);
+        if (ok) job.resolve({ proof, publicSignals });
+        else job.reject(new Error(error));
+      };
+      worker.onerror = () => {
+        // Worker failed to load/execute — stop using it, drain jobs as failures
+        // so the caller falls back to the main thread.
+        workerBroken = true;
+        for (const [, job] of pendingJobs) job.reject(new Error("worker failed"));
+        pendingJobs.clear();
+        try { worker?.terminate(); } catch { /* already dead */ }
+        worker = null;
+      };
+    } catch {
+      workerBroken = true;
+      return null;
+    }
+  }
+  return worker;
+}
+
+/** Generates a real Groth16 proof in the browser (Web Worker first). */
 export async function generateProof(inputs: Record<string, string>, circuit: CircuitName): Promise<ProofResult> {
-  const snarkjs = loadSnarkJs();
   const { wasm, zkey } = ARTIFACTS[circuit];
+
+  const wk = getWorker();
+  if (wk) {
+    const id = nextJobId++;
+    try {
+      const result = await new Promise<{ proof: Groth16Proof; publicSignals: string[] }>((resolve, reject) => {
+        pendingJobs.set(id, { resolve, reject });
+        wk.postMessage({ id, inputs, wasm, zkey });
+      });
+      return toProofResult(result, circuit);
+    } catch {
+      // fall through to the main-thread path (worker unusable)
+    }
+  }
+
+  const snarkjs = loadSnarkJs();
   const { proof, publicSignals } = await snarkjs.groth16.fullProve(inputs, wasm, zkey);
+  return toProofResult({ proof, publicSignals }, circuit);
+}
+
+function toProofResult(
+  r: { proof: Groth16Proof; publicSignals: string[] },
+  circuit: CircuitName
+): ProofResult {
+  void circuit;
 
   // Solidity verifier argument mapping (matches snarkjs exportSolidityCallData)
   const callArgs = {
-    pA: [BigInt(proof.pi_a[0]), BigInt(proof.pi_a[1])] as [bigint, bigint],
+    pA: [BigInt(r.proof.pi_a[0]), BigInt(r.proof.pi_a[1])] as [bigint, bigint],
     pB: [
-      [BigInt(proof.pi_b[0][1]), BigInt(proof.pi_b[0][0])],
-      [BigInt(proof.pi_b[1][1]), BigInt(proof.pi_b[1][0])],
+      [BigInt(r.proof.pi_b[0][1]), BigInt(r.proof.pi_b[0][0])],
+      [BigInt(r.proof.pi_b[1][1]), BigInt(r.proof.pi_b[1][0])],
     ] as [[bigint, bigint], [bigint, bigint]],
-    pC: [BigInt(proof.pi_c[0]), BigInt(proof.pi_c[1])] as [bigint, bigint],
-    pub: publicSignals.map((v) => BigInt(v)),
+    pC: [BigInt(r.proof.pi_c[0]), BigInt(r.proof.pi_c[1])] as [bigint, bigint],
+    pub: r.publicSignals.map((v) => BigInt(v)),
   };
-  return { proof, publicSignals, callArgs };
+  return { proof: r.proof, publicSignals: r.publicSignals, callArgs };
 }

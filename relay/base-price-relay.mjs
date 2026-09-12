@@ -28,11 +28,6 @@ const PORT = Number(process.env.PRICE_RELAY_PORT ?? 8787);
 
 // Verified on-chain on Base mainnet (description/decimals/latestRoundData):
 const FEEDS = {
-  WETH: {
-    feed: "0x50015f8b17fb2C290Dde41fDc246ed0dcEE93a8b", // "ETH / USD", 8 decimals
-    target: "0x4200000000000000000000000000000000000006", // Horizen WETH
-    maxAgeSecs: 2 * 3600, // deviation-based feed; reject anything older
-  },
   USDC: {
     feed: "0x01Bab8761d882A3d34690f515EB3126455501bB5", // "USDC / USD", 8 decimals
     target: "0x01c7AEb2A0428b4159c0E333712f40e127aF639E", // Horizen USDC
@@ -128,13 +123,17 @@ async function refresh() {
 }
 
 // ---------------------------------------------------------------- server ---
+// JSON.stringify with BigInt support: BigInts (token amounts in base units)
+// are serialized as decimal strings so /prices never throws.
+const jsonSafe = (value) => JSON.stringify(value, (_, v) => (typeof v === "bigint" ? v.toString() : v));
+
 const server = http.createServer(async (req, res) => {
   res.setHeader("Content-Type", "application/json");
   try {
     if (req.method === "GET" && req.url === "/prices") {
-      res.end(JSON.stringify(await currentRelayState()));
+      res.end(jsonSafe(await currentRelayState()));
     } else if (req.method === "POST" && req.url === "/refresh") {
-      res.end(JSON.stringify(await refresh()));
+      res.end(jsonSafe(await refresh()));
     } else if (req.method === "GET" && req.url === "/health") {
       res.end(JSON.stringify({ ok: true, oracle: oracleAddr, horizen: await horizen.getAddress() }));
     } else {

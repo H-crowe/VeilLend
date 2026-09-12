@@ -1,0 +1,346 @@
+[
+  {
+    "type": "function",
+    "name": "asset",
+    "stateMutability": "view",
+    "outputs": [
+      {
+        "type": "address"
+      }
+    ],
+    "inputs": []
+  },
+  {
+    "type": "function",
+    "name": "decimals",
+    "stateMutability": "view",
+    "outputs": [
+      {
+        "type": "uint8"
+      }
+    ],
+    "inputs": []
+  },
+  {
+    "type": "function",
+    "name": "symbol",
+    "stateMutability": "view",
+    "outputs": [
+      {
+        "type": "string"
+      }
+    ],
+    "inputs": []
+  },
+  {
+    "type": "function",
+    "name": "balanceOf",
+    "stateMutability": "view",
+    "outputs": [
+      {
+        "type": "uint256"
+      }
+    ],
+    "inputs": [
+      {
+        "name": "",
+        "type": "address"
+      }
+    ]
+  },
+  {
+    "type": "function",
+    "name": "totalAssets",
+    "stateMutability": "view",
+    "outputs": [
+      {
+        "type": "uint256"
+      }
+    ],
+    "inputs": []
+  },
+  {
+    "type": "function",
+    "name": "totalBorrows",
+    "stateMutability": "view",
+    "outputs": [
+      {
+        "type": "uint256"
+      }
+    ],
+    "inputs": []
+  },
+  {
+    "type": "function",
+    "name": "availableLiquidity",
+    "stateMutability": "view",
+    "outputs": [
+      {
+        "type": "uint256"
+      }
+    ],
+    "inputs": []
+  },
+  {
+    "type": "function",
+    "name": "utilization",
+    "stateMutability": "view",
+    "outputs": [
+      {
+        "type": "uint256"
+      }
+    ],
+    "inputs": []
+  },
+  {
+    "type": "function",
+    "name": "rateBps",
+    "stateMutability": "view",
+    "outputs": [
+      {
+        "type": "uint256"
+      }
+    ],
+    "inputs": []
+  },
+  {
+    "type": "function",
+    "name": "feeBps",
+    "stateMutability": "view",
+    "outputs": [
+      {
+        "type": "uint256"
+      }
+    ],
+    "inputs": []
+  },
+  {
+    "type": "function",
+    "name": "accruedFees",
+    "stateMutability": "view",
+    "outputs": [
+      {
+        "type": "uint256"
+      }
+    ],
+    "inputs": []
+  },
+  {
+    "type": "function",
+    "name": "projectedInterest",
+    "stateMutability": "view",
+    "outputs": [
+      {
+        "type": "uint256"
+      }
+    ],
+    "inputs": []
+  },
+  {
+    "type": "function",
+    "name": "convertToShares",
+    "stateMutability": "view",
+    "outputs": [
+      {
+        "type": "uint256"
+      }
+    ],
+    "inputs": [
+      {
+        "name": "assets",
+        "type": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "function",
+    "name": "convertToAssets",
+    "stateMutability": "view",
+    "outputs": [
+      {
+        "type": "uint256"
+      }
+    ],
+    "inputs": [
+      {
+        "name": "shares",
+        "type": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "function",
+    "name": "maxWithdraw",
+    "stateMutability": "view",
+    "outputs": [
+      {
+        "type": "uint256"
+      }
+    ],
+    "inputs": [
+      {
+        "name": "owner",
+        "type": "address"
+      }
+    ]
+  },
+  {
+    "type": "function",
+    "name": "maxRedeem",
+    "stateMutability": "view",
+    "outputs": [
+      {
+        "type": "uint256"
+      }
+    ],
+    "inputs": [
+      {
+        "name": "owner",
+        "type": "address"
+      }
+    ]
+  },
+  {
+    "type": "function",
+    "name": "deposit",
+    "stateMutability": "nonpayable",
+    "outputs": [
+      {
+        "type": "uint256"
+      }
+    ],
+    "inputs": [
+      {
+        "name": "assets",
+        "type": "uint256"
+      },
+      {
+        "name": "receiver",
+        "type": "address"
+      }
+    ]
+  },
+  {
+    "type": "function",
+    "name": "redeem",
+    "stateMutability": "nonpayable",
+    "outputs": [
+      {
+        "type": "uint256"
+      }
+    ],
+    "inputs": [
+      {
+        "name": "shares",
+        "type": "uint256"
+      },
+      {
+        "name": "receiver",
+        "type": "address"
+      },
+      {
+        "name": "owner",
+        "type": "address"
+      }
+    ]
+  },
+  {
+    "type": "function",
+    "name": "approve",
+    "stateMutability": "nonpayable",
+    "outputs": [
+      {
+        "type": "bool"
+      }
+    ],
+    "inputs": [
+      {
+        "name": "spender",
+        "type": "address"
+      },
+      {
+        "name": "value",
+        "type": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "function",
+    "name": "allowance",
+    "stateMutability": "view",
+    "outputs": [
+      {
+        "type": "uint256"
+      }
+    ],
+    "inputs": [
+      {
+        "name": "owner",
+        "type": "address"
+      },
+      {
+        "name": "spender",
+        "type": "address"
+      }
+    ]
+  },
+  {
+    "type": "event",
+    "name": "Deposit",
+    "anonymous": false,
+    "inputs": [
+      {
+        "name": "sender",
+        "type": "address",
+        "indexed": true
+      },
+      {
+        "name": "owner",
+        "type": "address",
+        "indexed": true
+      },
+      {
+        "name": "assets",
+        "type": "uint256",
+        "indexed": false
+      },
+      {
+        "name": "shares",
+        "type": "uint256",
+        "indexed": false
+      }
+    ]
+  },
+  {
+    "type": "event",
+    "name": "Withdraw",
+    "anonymous": false,
+    "inputs": [
+      {
+        "name": "sender",
+        "type": "address",
+        "indexed": true
+      },
+      {
+        "name": "receiver",
+        "type": "address",
+        "indexed": true
+      },
+      {
+        "name": "owner",
+        "type": "address",
+        "indexed": true
+      },
+      {
+        "name": "assets",
+        "type": "uint256",
+        "indexed": false
+      },
+      {
+        "name": "shares",
+        "type": "uint256",
+        "indexed": false
+      }
+    ]
+  }
+]

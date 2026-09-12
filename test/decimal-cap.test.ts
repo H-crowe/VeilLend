@@ -44,7 +44,7 @@ const PRICE_DEBT = 1n * 10n ** 8n; // $1 per vDBT-style debt token
 // normalized = raw oracle price * 10^(18 - decimals).
 const normPrice = (rawPrice: bigint, decimals: number): bigint =>
   rawPrice * 10n ** BigInt(18 - decimals);
-const PRICE_WETH = 3_000n * 10n ** 8n; // $3000, 1e8-scaled
+const PRICE_ALT = 3_000n * 10n ** 8n; // $3000, 1e8-scaled (neutral 18-dec collateral mock)
 const PRICE_USDC = 1n * 10n ** 8n; // $1, 1e8-scaled
 const RATE = {
   baseRateBps: 500,
@@ -61,7 +61,7 @@ const bytes32 = (v: bigint) => ethers.zeroPadValue(ethers.toBeHex(v), 32);
 async function deployFixture() {
   requireZkArtifacts();
   const [owner, user, liquidator] = await ethers.getSigners();
-  const weth = (await (await ethers.getContractFactory("TokenMock")).deploy("Wrapped Ether", "WETH")) as unknown as TokenMock & { decimals(): Promise<number>; mint(a: string, v: bigint): Promise<unknown>; connect(a: never): TokenMock };
+  const alt = (await (await ethers.getContractFactory("TokenMock")).deploy("Alt Token", "ALT")) as unknown as TokenMock & { decimals(): Promise<number>; mint(a: string, v: bigint): Promise<unknown>; connect(a: never): TokenMock };
   const usdc = (await (await ethers.getContractFactory("TokenMock6")).deploy("USD Coin", "USDC")) as unknown as TokenMock6 & { decimals(): Promise<number>; mint(a: string, v: bigint): Promise<unknown>; connect(a: never): TokenMock6; approve(a: string, v: bigint): Promise<unknown>; balanceOf(a: string): Promise<bigint> };
   const oracle = (await (await ethers.getContractFactory("MockPriceOracle")).deploy()) as unknown as MockPriceOracle & { setPrice(a: string, p: bigint): Promise<unknown> };
   const verifier = await (await ethers.getContractFactory("Groth16Verifier")).deploy();
@@ -74,20 +74,20 @@ async function deployFixture() {
             { kind: "uups" },
           ))) as VeilLend;
 
-  await veil.connect(owner).enableCollateralAsset(await weth.getAddress());
+  await veil.connect(owner).enableCollateralAsset(await alt.getAddress());
   await veil.connect(owner).enableCollateralAsset(await usdc.getAddress());
   await veil.connect(owner).enableDebtAsset(await usdc.getAddress(), RATE);
-  await veil.connect(owner).enableDebtAsset(await weth.getAddress(), RATE);
-  await oracle.setPrice(await weth.getAddress(), PRICE_WETH);
+  await veil.connect(owner).enableDebtAsset(await alt.getAddress(), RATE);
+  await oracle.setPrice(await alt.getAddress(), PRICE_ALT);
   await oracle.setPrice(await usdc.getAddress(), PRICE_USDC);
 
   for (const s of [user, liquidator]) {
-    await (weth as any).mint(s.address, 1_000_000n * WAD);
+    await (alt as any).mint(s.address, 1_000_000n * WAD);
     await (usdc as any).mint(s.address, 1_000_000n * USD6);
-    await (weth as any).connect(s).approve(await veil.getAddress(), ethers.MaxUint256);
+    await (alt as any).connect(s).approve(await veil.getAddress(), ethers.MaxUint256);
     await (usdc as any).connect(s).approve(await veil.getAddress(), ethers.MaxUint256);
   }
-  return { veil, weth, usdc, oracle, owner, user, liquidator };
+  return { veil, alt, usdc, oracle, owner, user, liquidator };
 }
 
 async function createAndDeposit(
@@ -138,26 +138,26 @@ async function createAndDeposit(
 
 describe("decimals-aware borrow cap", () => {
   it("records token decimals at enable time", async () => {
-    const { veil, weth, usdc } = await loadFixture(deployFixture);
-    expect(await veil.assetDecimals(await weth.getAddress())).to.equal(18);
+    const { veil, alt, usdc } = await loadFixture(deployFixture);
+    expect(await veil.assetDecimals(await alt.getAddress())).to.equal(18);
     expect(await veil.assetDecimals(await usdc.getAddress())).to.equal(6);
   });
 
   it("18→6: borrows within the price-scaled dollar cap succeed end-to-end (ZK + balances)", async () => {
-    const { veil, user, liquidator, weth, usdc } = await loadFixture(deployFixture);
+    const { veil, user, liquidator, alt, usdc } = await loadFixture(deployFixture);
     // seed USDC liquidity: originated-debt position repays 40,000 USDC
     const seedId = (await veil.nextPositionId()) + 1n;
     const currentIndex = await veil.currentDebtIndex(await usdc.getAddress());
     const seedState = makeInitialState({
       positionId: seedId,
-      collateralAsset: BigInt(await weth.getAddress()),
+      collateralAsset: BigInt(await alt.getAddress()),
       debtAsset: BigInt(await usdc.getAddress()),
       currentIndex,
       controlSecret: BigInt(randHex()),
       salt: BigInt(randHex()),
     });
     seedState.debt = 40_000n * USD6;
-    await veil.createPosition(await weth.getAddress(), await usdc.getAddress(), bytes32(await computeCommitment(seedState)));
+    await veil.createPosition(await alt.getAddress(), await usdc.getAddress(), bytes32(await computeCommitment(seedState)));
     const repT = await buildTransition({
       oldState: seedState,
       actionId: 2n,
@@ -184,8 +184,8 @@ describe("decimals-aware borrow cap", () => {
     );
     expect(await veil.debtCustody(await usdc.getAddress())).to.equal(40_000n * USD6);
 
-    // user deposits 10 WETH, borrows 20,000 USDC (=$20,000 ≤ 75% of $30,000)
-    const { id, state } = await createAndDeposit(veil, weth, usdc, user, 10n * WAD);
+    // user deposits 10 ALT, borrows 20,000 USDC (=$20,000 ≤ 75% of $30,000)
+    const { id, state } = await createAndDeposit(veil, alt, usdc, user, 10n * WAD);
     const borrowAmount = 20_000n * USD6;
     const borT = await buildRiskTransition({
       oldState: state,
@@ -193,7 +193,7 @@ describe("decimals-aware borrow cap", () => {
       amount: borrowAmount,
       currentIndex: await veil.currentDebtIndex(await usdc.getAddress()),
       newSalt: BigInt(randHex()),
-      params: { collateralPrice: normPrice(PRICE_WETH, 18), debtPrice: normPrice(PRICE_USDC, 6), maxLtvBps: 7500n },
+      params: { collateralPrice: normPrice(PRICE_ALT, 18), debtPrice: normPrice(PRICE_USDC, 6), maxLtvBps: 7500n },
       recipient: BigInt(user.address),
     });
     const borProof = await generateProof(borT.inputs, "risk_transition");
@@ -220,19 +220,19 @@ describe("decimals-aware borrow cap", () => {
   });
 
   it("18→6: borrow above the price-scaled dollar cap reverts with BorrowCapExceeded", async () => {
-    const { veil, user, liquidator, weth, usdc } = await loadFixture(deployFixture);
+    const { veil, user, liquidator, alt, usdc } = await loadFixture(deployFixture);
     const seedId = (await veil.nextPositionId()) + 1n;
     const currentIndex = await veil.currentDebtIndex(await usdc.getAddress());
     const seedState = makeInitialState({
       positionId: seedId,
-      collateralAsset: BigInt(await weth.getAddress()),
+      collateralAsset: BigInt(await alt.getAddress()),
       debtAsset: BigInt(await usdc.getAddress()),
       currentIndex,
       controlSecret: BigInt(randHex()),
       salt: BigInt(randHex()),
     });
     seedState.debt = 40_000n * USD6;
-    await veil.createPosition(await weth.getAddress(), await usdc.getAddress(), bytes32(await computeCommitment(seedState)));
+    await veil.createPosition(await alt.getAddress(), await usdc.getAddress(), bytes32(await computeCommitment(seedState)));
     const repT = await buildTransition({
       oldState: seedState,
       actionId: 2n,
@@ -258,8 +258,8 @@ describe("decimals-aware borrow cap", () => {
       repProof.callArgs.pC
     );
 
-    const { id, state } = await createAndDeposit(veil, weth, usdc, user, 10n * WAD);
-    // dollar cap = 10 WETH × $3000 × 75% = $22,500 → 22.5e6 USDC-atomic
+    const { id, state } = await createAndDeposit(veil, alt, usdc, user, 10n * WAD);
+    // dollar cap = 10 ALT × $3000 × 75% = $22,500 → 22.5e6 USDC-atomic
     const overCap = 24_000n * USD6;
     const borT = await buildRiskTransition({
       oldState: state,
@@ -267,7 +267,7 @@ describe("decimals-aware borrow cap", () => {
       amount: overCap,
       currentIndex: await veil.currentDebtIndex(await usdc.getAddress()),
       newSalt: BigInt(randHex()),
-      params: { collateralPrice: normPrice(PRICE_WETH, 18), debtPrice: normPrice(PRICE_USDC, 6), maxLtvBps: 7500n },
+      params: { collateralPrice: normPrice(PRICE_ALT, 18), debtPrice: normPrice(PRICE_USDC, 6), maxLtvBps: 7500n },
       recipient: BigInt(user.address),
     });
     const borProof = await generateProof(borT.inputs, "risk_transition");
@@ -291,31 +291,31 @@ describe("decimals-aware borrow cap", () => {
     ).to.be.revertedWithCustomError(veil, "BorrowCapExceeded");
   });
 
-  it("6→18: exceedsBorrowCap view is decimals-correct for USDC collateral vs WETH debt", async () => {
-    const { veil, user, weth, usdc } = await loadFixture(deployFixture);
+  it("6→18: exceedsBorrowCap view is decimals-correct for USDC collateral vs 18-dec debt", async () => {
+    const { veil, user, alt, usdc } = await loadFixture(deployFixture);
     // 1000 USDC collateral (6 decimals) — deposit via ZK
-    const { id } = await createAndDeposit(veil, usdc as unknown as TokenMock, weth as unknown as TokenMock, user, 1000n * USD6);
-    // dollar cap = 1000 × $1 × 75% = $750 → 0.25 WETH (2.5e17 atomic)
-    expect(await veil.exceedsBorrowCap(id, 2n * 10n ** 16n, await usdc.getAddress(), await weth.getAddress())).to.equal(false);
-    expect(await veil.exceedsBorrowCap(id, 3n * 10n ** 17n, await usdc.getAddress(), await weth.getAddress())).to.equal(true);
-    expect(await veil.exceedsBorrowCap(id, 1n * 10n ** 21n, await usdc.getAddress(), await weth.getAddress())).to.equal(true);
+    const { id } = await createAndDeposit(veil, usdc as unknown as TokenMock, alt as unknown as TokenMock, user, 1000n * USD6);
+    // dollar cap = 1000 × $1 × 75% = $750 → 0.25 ALT (2.5e17 atomic)
+    expect(await veil.exceedsBorrowCap(id, 2n * 10n ** 16n, await usdc.getAddress(), await alt.getAddress())).to.equal(false);
+    expect(await veil.exceedsBorrowCap(id, 3n * 10n ** 17n, await usdc.getAddress(), await alt.getAddress())).to.equal(true);
+    expect(await veil.exceedsBorrowCap(id, 1n * 10n ** 21n, await usdc.getAddress(), await alt.getAddress())).to.equal(true);
   });
 
   it("same-decimals (18/18) cap semantics: price-scaled dollar cap reduces to the raw-unit cap when prices are equal", async () => {
-    const { veil, user, liquidator, weth } = await loadFixture(deployFixture);
-    // seed liquidity: originated-debt position in WETH, repaid
+    const { veil, user, liquidator, alt } = await loadFixture(deployFixture);
+    // seed liquidity: originated-debt position in ALT, repaid
     const seedId = (await veil.nextPositionId()) + 1n;
-    const currentIndex = await veil.currentDebtIndex(await weth.getAddress());
+    const currentIndex = await veil.currentDebtIndex(await alt.getAddress());
     const seedState = makeInitialState({
       positionId: seedId,
-      collateralAsset: BigInt(await weth.getAddress()),
-      debtAsset: BigInt(await weth.getAddress()),
+      collateralAsset: BigInt(await alt.getAddress()),
+      debtAsset: BigInt(await alt.getAddress()),
       currentIndex,
       controlSecret: BigInt(randHex()),
       salt: BigInt(randHex()),
     });
     seedState.debt = 200n * WAD;
-    await veil.createPosition(await weth.getAddress(), await weth.getAddress(), bytes32(await computeCommitment(seedState)));
+    await veil.createPosition(await alt.getAddress(), await alt.getAddress(), bytes32(await computeCommitment(seedState)));
     const repT = await buildTransition({
       oldState: seedState,
       actionId: 2n,
@@ -341,15 +341,15 @@ describe("decimals-aware borrow cap", () => {
       repProof.callArgs.pC
     );
 
-    const { id, state } = await createAndDeposit(veil, weth, weth, user, 100n * WAD);
-    // P_c == P_d → the dollar cap reduces to supported × 75% = 75 WETH
+    const { id, state } = await createAndDeposit(veil, alt, alt, user, 100n * WAD);
+    // P_c == P_d → the dollar cap reduces to supported × 75% = 75 ALT
     const within = await buildRiskTransition({
       oldState: state,
       actionId: ACTION_BORROW,
       amount: 50n * WAD, // ≤ 75 cap
-      currentIndex: await veil.currentDebtIndex(await weth.getAddress()),
+      currentIndex: await veil.currentDebtIndex(await alt.getAddress()),
       newSalt: BigInt(randHex()),
-      params: { collateralPrice: PRICE_WETH, debtPrice: PRICE_WETH, maxLtvBps: 7500n },
+      params: { collateralPrice: PRICE_ALT, debtPrice: PRICE_ALT, maxLtvBps: 7500n },
       recipient: BigInt(user.address),
     });
     const withinProof = await generateProof(within.inputs, "risk_transition");
@@ -376,9 +376,9 @@ describe("decimals-aware borrow cap", () => {
       oldState: within.newState,
       actionId: ACTION_BORROW,
       amount: 50n * WAD,
-      currentIndex: await veil.currentDebtIndex(await weth.getAddress()),
+      currentIndex: await veil.currentDebtIndex(await alt.getAddress()),
       newSalt: BigInt(randHex()),
-      params: { collateralPrice: PRICE_WETH, debtPrice: PRICE_WETH, maxLtvBps: 7500n },
+      params: { collateralPrice: PRICE_ALT, debtPrice: PRICE_ALT, maxLtvBps: 7500n },
       recipient: BigInt(user.address),
     });
     const beyondProof = await generateProof(beyond.inputs, "risk_transition");

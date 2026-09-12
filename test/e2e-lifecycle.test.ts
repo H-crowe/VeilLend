@@ -20,9 +20,9 @@ import {
  * supported asset combination, plus the negative cases.
  *
  * Supported matrix (the contract supports any enabled collateral × debt):
- *   collateral: vCOL (18) · WETH (18) · USDC (6)
+ *   collateral: vCOL (18) · USDC (6)
  *   debt:       vDBT (18) · USDC (6)
- *   → 6 pairs, all tested through: create → deposit → borrow → repay →
+ *   → 4 pairs, all tested through: create → deposit → borrow → repay →
  *     withdraw, verifying balances, custody, supportedCollateral,
  *     borrowOutstanding, sequence and activeCommitment after every step.
  *
@@ -35,7 +35,7 @@ import {
 const WAD = 10n ** 18n;
 const USD6 = 10n ** 6n;
 
-const PRICE = { vCOL: 2n * 10n ** 8n, vDBT: 1n * 10n ** 8n, WETH: 3_000n * 10n ** 8n, USDC: 1n * 10n ** 8n };
+const PRICE = { vCOL: 2n * 10n ** 8n, vDBT: 1n * 10n ** 8n, USDC: 1n * 10n ** 8n };
 
 const randHex = () => ethers.hexlify(ethers.randomBytes(31));
 const bytes32 = (v: bigint) => ethers.zeroPadValue(ethers.toBeHex(v), 32);
@@ -46,7 +46,7 @@ const norm = (raw1e8: bigint, decimals: number) => raw1e8 * 10n ** BigInt(18 - d
 
 interface PairDef {
   name: string;
-  col: "vCOL" | "WETH" | "USDC";
+  col: "vCOL" | "USDC";
   debt: "vDBT" | "USDC";
   depositAmount: bigint;
   borrowAmount: bigint;
@@ -55,8 +55,6 @@ interface PairDef {
 const PAIRS: PairDef[] = [
   { name: "vCOL → vDBT (18 → 18)", col: "vCOL", debt: "vDBT", depositAmount: 10n * WAD, borrowAmount: 5n * WAD },
   { name: "vCOL → USDC (18 → 6)", col: "vCOL", debt: "USDC", depositAmount: 10n * WAD, borrowAmount: 10n * USD6 },
-  { name: "WETH → vDBT (18 → 18)", col: "WETH", debt: "vDBT", depositAmount: 10n * WAD, borrowAmount: 5n * WAD },
-  { name: "WETH → USDC (18 → 6)", col: "WETH", debt: "USDC", depositAmount: 10n * WAD, borrowAmount: 20_000n * USD6 },
   { name: "USDC → vDBT (6 → 18)", col: "USDC", debt: "vDBT", depositAmount: 10_000n * USD6, borrowAmount: 5n * WAD },
   { name: "USDC → USDC (6 → 6)", col: "USDC", debt: "USDC", depositAmount: 10_000n * USD6, borrowAmount: 5_000n * USD6 },
 ];
@@ -65,20 +63,18 @@ async function deployFixture() {
   requireZkArtifacts();
   const [owner, user, liquidator] = await ethers.getSigners();
 
-  const weth = (await (await ethers.getContractFactory("TokenMock")).deploy("Wrapped Ether", "WETH")) as unknown as TokenMock;
   const usdc = (await (await ethers.getContractFactory("TokenMock6")).deploy("USD Coin", "USDC")) as unknown as TokenMock6;
   const vcol = (await (await ethers.getContractFactory("TokenMock")).deploy("Veil Collateral", "vCOL")) as unknown as TokenMock;
   const vdbt = (await (await ethers.getContractFactory("TokenMock")).deploy("Veil Debt", "vDBT")) as unknown as TokenMock6 as unknown as TokenMock;
 
-  const tokens: Record<string, TokenMock | TokenMock6> = { vCOL: vcol, vDBT: vdbt, WETH: weth, USDC: usdc };
-  const decimalsOf: Record<string, number> = { vCOL: 18, vDBT: 18, WETH: 18, USDC: 6 };
+  const tokens: Record<string, TokenMock | TokenMock6> = { vCOL: vcol, vDBT: vdbt, USDC: usdc };
+  const decimalsOf: Record<string, number> = { vCOL: 18, vDBT: 18, USDC: 6 };
 
   const mockStork = (await (await ethers.getContractFactory("MockStorkOracle")).deploy(3600, 1)) as unknown as MockStorkOracle;
   const storkAdapter = (await (await ethers.getContractFactory("StorkPriceOracle")).deploy(await mockStork.getAddress())) as unknown as StorkPriceOracle;
 
-  // feed IDs: official registry IDs for WETH/USDC; local test IDs for the mocks
+  // feed IDs: official registry ID for USDC; local test IDs for the mocks
   const feedIds: Record<string, string> = {
-    WETH: "0x59102b37de83bdda9f38ac8254e596f0d9ac61d2035c07936675e87342817160",
     USDC: "0x7416a56f222e196d0487dce8a1a8003936862e7a15092a91898d69fa8bce290c",
     vCOL: ethers.id("vCOLUSD"),
     vDBT: ethers.id("vDBTUSD"),
@@ -106,7 +102,7 @@ async function deployFixture() {
   )) as unknown as VeilLend;
 
   // enable the full supported matrix
-  for (const sym of ["vCOL", "WETH", "USDC"]) await veil.connect(owner).enableCollateralAsset(await (tokens[sym] as TokenMock).getAddress());
+  for (const sym of ["vCOL", "USDC"]) await veil.connect(owner).enableCollateralAsset(await (tokens[sym] as TokenMock).getAddress());
   for (const sym of ["vDBT", "USDC"]) {
     await veil.connect(owner).enableDebtAsset(await (tokens[sym] as TokenMock).getAddress(), {
       baseRateBps: 500, slopeBps: 2000, targetUtilizationBps: 8000,
@@ -387,7 +383,7 @@ describe("LOCAL E2E — negative cases and invariants", () => {
     const f = await loadFixture(deployFixture);
     const { veil, tokens, user } = f;
     const col = tokens.vCOL as TokenMock;
-    const weth = tokens.WETH as TokenMock;
+    const wrongAsset = (await (await ethers.getContractFactory("TokenMock")).deploy("Wrong Asset", "WRONG")) as unknown as TokenMock;
     const debt = tokens.vDBT as TokenMock;
     const id = (await veil.nextPositionId()) + 1n;
     const currentIndex = await veil.currentDebtIndex(await debt.getAddress());
@@ -396,8 +392,8 @@ describe("LOCAL E2E — negative cases and invariants", () => {
       currentIndex, controlSecret: BigInt(randHex()), salt: BigInt(randHex()),
     });
     await veil.createPosition(await col.getAddress(), await debt.getAddress(), bytes32(await computeCommitment(correctState)));
-    // witness claims WETH collateral while the position's commitment is over vCOL
-    const wrongState = { ...correctState, collateralAsset: BigInt(await weth.getAddress()) };
+    // witness claims a DIFFERENT collateral asset while the position's commitment is over vCOL
+    const wrongState = { ...correctState, collateralAsset: BigInt(await wrongAsset.getAddress()) };
     const depT = await buildTransition({ oldState: wrongState, actionId: ACTION_DEPOSIT, amount: 1n * WAD, currentIndex, newSalt: BigInt(randHex()) });
     const depP = await generateProof(depT.inputs);
     // the on-chain commitment check rejects the mismatched state before the

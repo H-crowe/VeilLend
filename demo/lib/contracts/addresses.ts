@@ -14,7 +14,7 @@ export const ADDRESSES = {
   // TESTNET/DEMO ONLY — not production oracle infrastructure.
   mockPriceOracle: "0x024CF745c737B74f8BCc84d1C73687853310b715",
   // Stork production path (intended, kept intact): adapter wired to the real
-  // Stork push oracle with WETHUSD/USDCUSD feeds. Not yet price-active on
+  // Stork push oracle with the USDCUSD feed. Not yet price-active on
   // testnet (no publisher relaying) — set storkPriceOracle above to switch
   // the demo price source to Stork once Stork testnet publishing starts.
   storkPriceOracle: "",
@@ -24,12 +24,22 @@ export const ADDRESSES = {
 } as const;
 
 /**
+ * Per-debt-asset LiquidityPool (UUPS) addresses. Each supported debt asset
+ * has its own independent pool (lender shares, economics, reserves).
+ * Addresses from deployments/liquidity-pools-horizenTestnet.json (deployed,
+ * wired via setDebtPool, and verified on the explorer).
+ */
+export const POOLS: Record<string, string> = {
+  vDBT: "0x21Cf3FFE0FF3ccf422c89A0A55fCE1949C84fB57",
+  USDC: "0xf406448E519345C9D8bc08B606DaB677Cb12aCC1",
+} as const;
+
+/**
  * Asset registry shown in the demo alongside the active vCOL/vDBT pair.
  * vCOL/vDBT remain the protocol's active collateral/debt tokens (unchanged).
- * WETH and USDC are enabled on the current deployment and testable now
- * (priced by the temporary Testnet/Demo Base Chainlink relay); their Stork
- * production feeds (WETHUSD / USDCUSD) activate when Stork testnet
- * publishing starts. ZEN stays disabled — no Stork ZEN/USD feed exists.
+ * MVP: vCOL collateral · vDBT/USDC debt (active, priced by the temporary
+ * Testnet/Demo Base Chainlink relay; Stork USDCUSD is the production feed).
+ * ZEN stays disabled — no Stork ZEN/USD feed exists.
  */
 export type AssetEntry = {
   symbol: string;
@@ -61,14 +71,6 @@ export const ASSETS: readonly AssetEntry[] = [
     storkFeedId: "",
     status: "active",
     note: "Demo debt token (mock, 18 decimals) — active in this deployment",
-  },
-  {
-    symbol: "WETH",
-    address: "0x4200000000000000000000000000000000000006",
-    decimals: 18,
-    storkFeedId: "0x8afba5f1a5d4969d23c3b42db1b88f8a9c8176392de5bf066752260478ce82b8", // keccak256("WETHUSD")
-    status: "active",
-    note: "Ecosystem collateral (18 decimals) — priced by the Testnet/Demo Base Chainlink relay; Stork WETHUSD is the production feed",
   },
   {
     symbol: "USDC",

@@ -74,6 +74,21 @@ interface IPriceOracle {
 }
 
 /**
+ * @notice Minimal per-asset Liquidity Pool boundary. Each supported debt
+ * asset may be wired to its own pool via `debtPools`; when wired, borrow
+ * payouts are funded by the pool and repayments/liquidation settlements are
+ * returned to it. When unwired (`address(0)`), the legacy `debtCustody`
+ * reserve path is used unchanged.
+ */
+interface ILiquidityPool {
+    function pullLiquidity(address to, uint256 amount) external;
+    function onRepayment(uint256 principal, uint256 interest) external;
+    function writeOffBorrows(uint256 amount) external;
+    function updateRateBps(uint256 rateBps_) external;
+    function totalBorrows() external view returns (uint256);
+}
+
+/**
  * @title VeilLend
  * @notice Privacy-first confidential lending for the Horizen ecosystem.
  *
@@ -201,10 +216,12 @@ contract VeilLend is Initializable, Ownable2StepUpgradeable, PausableUpgradeable
     error InvalidProof();
     error UnsupportedAction();
     error InsufficientLiquidity();
+    error CollateralCustodyNotEmpty(address asset);
     error InsufficientCustody();
     error UnsupportedCollateral();
     error BorrowCapExceeded();
     error InvalidLiquidationAmount();
+    error NothingToSettle();
     error OracleNotSet();
     error InvalidPrice();
     error StalePrice();
@@ -236,6 +253,8 @@ contract VeilLend is Initializable, Ownable2StepUpgradeable, PausableUpgradeable
     event InterestAccrued(address indexed asset, uint256 prevIndex, uint256 newIndex, uint64 lastAccrual);
     event CollateralAssetEnabled(address indexed asset);
     event DebtAssetEnabled(address indexed asset, RateConfig config);
+    event DebtAssetDisabled(address indexed asset);
+    event DebtPoolSet(address indexed asset, address indexed pool);
     event RateConfigUpdated(address indexed asset, RateConfig config);
     event OracleUpdated(address indexed oracle);
     event MaxPriceStalenessUpdated(uint256 maxPriceStaleness);
@@ -301,6 +320,14 @@ contract VeilLend is Initializable, Ownable2StepUpgradeable, PausableUpgradeable
 
     IPriceOracle public oracle;
     uint256 public maxPriceStaleness; // set to 1 hours in initialize
+
+    /// @notice Per-asset Liquidity Pool wiring (debt-asset architecture prep).
+    /// Each supported debt asset maps to its own independent pool contract;
+    /// address(0) means "not yet wired" (payouts still come from debtCustody).
+    /// Declared LAST so a UUPS upgrade of the deployed proxy stays
+    /// storage-layout compatible (append-only state). Pool addresses are
+    /// configuration, never hardcoded.
+    mapping(address => address) public debtPools;
 
     // ------------------------------------------------------------------
     // Initialization (UUPS)
@@ -422,9 +449,13 @@ contract VeilLend is Initializable, Ownable2StepUpgradeable, PausableUpgradeable
     ) external whenNotPaused nonReentrant {
         _applyVerifiedTransition(t, pA, pB, pC, ACTION_REPAY);
         uint256 received = _pullTokens(_position(t.positionId).debtAsset, t.publicAmount);
-        debtCustody[_position(t.positionId).debtAsset] += received;
         uint256 outstanding = borrowOutstanding[t.positionId];
-        borrowOutstanding[t.positionId] = received >= outstanding ? 0 : outstanding - received;
+        // principal/interest split from VeilLend's own per-position ledger:
+        // the repaid amount covers the position's outstanding principal first;
+        // anything beyond it is realized interest for the pool's lenders.
+        uint256 principalRepaid = received >= outstanding ? outstanding : received;
+        _settleDebt(_position(t.positionId).debtAsset, received, principalRepaid, received - principalRepaid);
+        borrowOutstanding[t.positionId] = outstanding - principalRepaid;
         emit Repayment(t.positionId, _position(t.positionId).debtAsset, received);
     }
 
@@ -492,6 +523,97 @@ contract VeilLend is Initializable, Ownable2StepUpgradeable, PausableUpgradeable
         received = IERC20(asset).balanceOf(address(this)) - balanceBefore;
         // Fee-on-transfer tokens would break the 1:1 custody binding.
         if (received != amount) revert TransferAmountMismatch();
+    }
+
+    /**
+     * @dev Settles a LIQUIDATION payment against the liquidated position's
+     * pool principal. The recovered principal reduces the pool's
+     * totalBorrows; any surplus is realized interest (fee/yield per pool
+     * config); an UNRECOVERED residual is realized bad debt — written off
+     * from the pool so no ghost principal remains. For unwired assets the
+     * legacy debtCustody path is used unchanged.
+     */
+    function _settleLiquidationPool(address debtAsset, uint256 debtOut, uint256 positionPrincipal) private {
+        uint256 principalRecovered = debtOut >= positionPrincipal ? positionPrincipal : debtOut;
+        uint256 interestRecovered = debtOut - principalRecovered;
+        uint256 badDebt = positionPrincipal - principalRecovered;
+        address pool = debtPools[debtAsset];
+        if (pool != address(0)) {
+            IERC20(debtAsset).safeTransfer(pool, debtOut);
+            ILiquidityPool(pool).onRepayment(principalRecovered, interestRecovered);
+            if (badDebt > 0) ILiquidityPool(pool).writeOffBorrows(badDebt);
+        } else {
+            debtCustody[debtAsset] += debtOut;
+        }
+    }
+
+    /**
+     * @notice Owner-only settlement of an ORPHANED position whose private
+     * witness is permanently unavailable (testnet recovery). No proof, no
+     * witness, no circuit involvement. Collateral is handled FIRST: the
+     * entire supportedCollateral is seized and its oracle-parity value in
+     * the debt asset is paid by the owner into the position's pool
+     * (principal recovery, capped by the pool's totalBorrows). Only the
+     * UNRECOVERED residual is realized as bad debt (pool.writeOffBorrows).
+     * The seized collateral is transferred to the owner as the recovery
+     * payment; the value difference between the collateral and the debt is
+     * an economic value difference that stays embedded in the recovered
+     * collateral — it is not interest and generates no fee. The position is
+     * closed and both ledgers reconcile to zero.
+     */
+    function settleOrphanPosition(uint256 positionId) external onlyOwner nonReentrant {
+        Position storage p = _requireActivePosition(positionId);
+        address debtAsset = p.debtAsset;
+        uint256 outstanding = borrowOutstanding[positionId];
+        uint256 seize = supportedCollateral[positionId];
+        if (outstanding == 0 && seize == 0) revert NothingToSettle();
+        address pool = debtPools[debtAsset];
+
+        if (pool != address(0) && outstanding > 0) {
+            ILiquidityPool lp = ILiquidityPool(pool);
+            uint256 poolBorrows = lp.totalBorrows();
+            uint256 parityDebt = seize > 0
+                ? (seize * _normalizedPrice(p.collateralAsset)) / _normalizedPrice(p.debtAsset)
+                : 0;
+            uint256 principalRecovered = parityDebt < outstanding ? parityDebt : outstanding;
+            uint256 poolClear = principalRecovered > poolBorrows ? poolBorrows : principalRecovered;
+            uint256 residual = outstanding - principalRecovered;
+            if (residual > 0) lp.writeOffBorrows(residual); // free borrows headroom first
+            IERC20(debtAsset).safeTransferFrom(msg.sender, address(this), poolClear);
+            IERC20(debtAsset).safeTransfer(pool, poolClear); // forward to the pool (its onRepayment expects the tokens in place)
+            lp.onRepayment(poolClear, 0); // principal recovery; orphan settle never realizes interest
+        }
+
+        // recovery payment: the seized collateral goes to the caller
+        if (seize > 0) {
+            supportedCollateral[positionId] = 0;
+            collateralCustody[p.collateralAsset] -= seize;
+            IERC20(p.collateralAsset).safeTransfer(msg.sender, seize);
+        }
+        p.status = Status.Closed;
+        delete borrowOutstanding[positionId];
+        emit OrphanPositionSettled(positionId, seize, outstanding);
+    }
+
+    event OrphanPositionSettled(uint256 indexed positionId, uint256 collateralSeized, uint256 debtWrittenOff);
+
+    /**
+     * @dev Settles incoming debt tokens (repayment or liquidation payment)
+     * into the asset's configured Liquidity Pool, or into the legacy
+     * debtCustody reserve when no pool is wired. The tokens are already held
+     * by the contract when this runs. VeilLend derives the principal/interest
+     * split from its own per-position ledger — never from the pool's
+     * aggregate totalBorrows — so one borrower's interest cannot be swallowed
+     * by another borrower's outstanding principal.
+     */
+    function _settleDebt(address debtAsset, uint256 amount, uint256 principal, uint256 interest) private {
+        address pool = debtPools[debtAsset];
+        if (pool != address(0)) {
+            IERC20(debtAsset).safeTransfer(pool, amount);
+            ILiquidityPool(pool).onRepayment(principal, interest);
+        } else {
+            debtCustody[debtAsset] += amount;
+        }
     }
 
     /// @notice Records the token decimals of an asset being enabled. Used by
@@ -581,10 +703,18 @@ contract VeilLend is Initializable, Ownable2StepUpgradeable, PausableUpgradeable
         // against. Overflow is only reachable with absurd token supplies and
         // reverts fail-closed.
         if (exceedsBorrowCap(t.positionId, amount, _position(t.positionId).collateralAsset, debtAsset)) revert BorrowCapExceeded();
-        if (debtCustody[debtAsset] < amount) revert InsufficientLiquidity();
-        debtCustody[debtAsset] -= amount;
+        address pool = debtPools[debtAsset];
+        if (pool != address(0)) {
+            // Pool-funded path: the pool checks its own available liquidity and
+            // pays the borrower directly (the F5-bound recipient of the proof).
+            ILiquidityPool(pool).pullLiquidity(msg.sender, amount);
+        } else {
+            // Legacy debtCustody reserve path (unwired assets).
+            if (debtCustody[debtAsset] < amount) revert InsufficientLiquidity();
+            debtCustody[debtAsset] -= amount;
+            IERC20(debtAsset).safeTransfer(msg.sender, amount);
+        }
         borrowOutstanding[t.positionId] += amount;
-        IERC20(debtAsset).safeTransfer(msg.sender, amount);
         emit Borrow(t.positionId, debtAsset, amount);
     }
 
@@ -763,7 +893,11 @@ contract VeilLend is Initializable, Ownable2StepUpgradeable, PausableUpgradeable
         uint256 balanceBefore = IERC20(p.debtAsset).balanceOf(address(this));
         IERC20(p.debtAsset).safeTransferFrom(msg.sender, address(this), debtOut);
         if (IERC20(p.debtAsset).balanceOf(address(this)) - balanceBefore != debtOut) revert TransferAmountMismatch();
-        debtCustody[p.debtAsset] += debtOut;
+        // settle the position's pool principal: recovered portion reduces the
+        // pool's totalBorrows; the UNRECOVERED residual is realized bad debt
+        // (written off) so no ghost principal remains in the pool.
+        balanceBefore = borrowOutstanding[positionId]; // reuse local (position pool principal)
+        _settleLiquidationPool(p.debtAsset, debtOut, balanceBefore);
 
         // settlement: collateral goes to the liquidator, position is closed,
         // its outstanding borrow is written off (socialized bad debt)
@@ -886,7 +1020,59 @@ contract VeilLend is Initializable, Ownable2StepUpgradeable, PausableUpgradeable
         if (!debtSupported[asset]) revert AssetNotSupported(asset);
         _validateRateConfig(config);
         rateConfigs[asset] = config;
+        // Keep the wired pool's interest model equal to the real borrower
+        // accrual rate (public config — no private state crosses here).
+        address pool = debtPools[asset];
+        if (pool != address(0)) ILiquidityPool(pool).updateRateBps(config.baseRateBps);
         emit RateConfigUpdated(asset, config);
+    }
+
+    /**
+     * @notice Removes a debt asset from the active configuration: new
+     * positions can no longer be created against it (createPosition checks
+     * `debtSupported`). Existing positions keep functioning — repay and the
+     * proof pipelines do not gate on this flag — and all configuration,
+     * index and custody state is preserved untouched for auditability.
+     * Intended for retiring legacy test assets; no balances are moved here.
+     */
+    function disableDebtAsset(address asset) external onlyOwner {
+        if (!debtSupported[asset]) revert AssetNotSupported(asset);
+        debtSupported[asset] = false;
+        emit DebtAssetDisabled(asset);
+    }
+
+    /**
+     * @notice ONE-TIME collateral-configuration migration, part of the
+     * debtPools upgrade (reinitializer(2), callable only through
+     * `upgradeToAndCall`). Takes the list of RETIRED collateral assets as a
+     * parameter — no asset is hardcoded — and clears their configuration
+     * entries (`collateralSupported` / `assetDecimals`). Fail-safe: an asset
+     * still holding custody cannot be cleared. Positions created while the
+     * asset was supported remain fully usable; only NEW positions are
+     * blocked (createPosition checks the flag).
+     */
+    function migrateCollateralRetirement(address[] calldata retiredCollateral) external onlyOwner reinitializer(2) {
+        for (uint256 i = 0; i < retiredCollateral.length; i++) {
+            address asset = retiredCollateral[i];
+            if (asset == address(0)) revert ZeroAddress();
+            if (collateralCustody[asset] != 0) revert CollateralCustodyNotEmpty(asset);
+            collateralSupported[asset] = false;
+            assetDecimals[asset] = 0;
+        }
+    }
+
+    /// @notice Wires a debt asset to its own independent Liquidity Pool.
+    /// Pure configuration — the pool contract is not implemented yet and no
+    /// funds move. `pool` may be address(0) to unwire. Deployment addresses
+    /// are supplied by configuration at wire time, never hardcoded.
+    function setDebtPool(address asset, address pool) external onlyOwner {
+        if (!debtSupported[asset]) revert AssetNotSupported(asset);
+        debtPools[asset] = pool;
+        if (pool != address(0)) {
+            // Sync the just-wired pool with the current borrower accrual rate.
+            ILiquidityPool(pool).updateRateBps(rateConfigs[asset].baseRateBps);
+        }
+        emit DebtPoolSet(asset, pool);
     }
 
     function setOracle(address oracle_) external onlyOwner {

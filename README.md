@@ -4,7 +4,7 @@
 
 VeilLend is a privacy-first lending protocol that keeps **collateral, debt, and health state private** while the protocol verifies solvency, state transitions, and liquidation eligibility on-chain. Private state is represented by **Poseidon commitments**; state transitions are authorized with **Groth16 zero-knowledge proofs** generated client-side and verified by Solidity contracts on Horizen.
 
-**Status: working testnet prototype (M1 implemented — see [`docs/MILESTONES.md`](docs/MILESTONES.md)). Testnet/demo only; not audited; not production infrastructure.**
+**Status: working testnet protocol. Testnet/demo only; not audited; not production infrastructure. Current state, deployments, and remaining work: [`docs/MILESTONES.md`](docs/MILESTONES.md).**
 
 ---
 
@@ -67,7 +67,7 @@ Full design — exact commitment/nullifier constructions, circuit signals, solve
 Two distinct paths — do not mix:
 
 * **Testnet/Demo (TEMPORARY):** Base Mainnet Chainlink → isolated relay (`relay/base-price-relay.mjs`, server-side owner key, no user price input) → owner-gated `OwnerMockPriceOracle` → VeilLend. **TESTNET/DEMO ONLY** — not production infrastructure, not a Stork replacement.
-* **Production (intended):** Stork signed data → permissionless `pushOracleUpdate` → deployed `StorkPriceOracle` adapter (official **WETHUSD**/`0x8afba5f1a5d4969d23c3b42db1b88f8a9c8176392de5bf066752260478ce82b8` and **USDCUSD**/`0x7416a56f222e196d0487dce8a1a8003936862e7a15092a91898d69fa8bce290c` feeds). The adapter is deployed and configured; it becomes the live price path when Stork testnet publishing starts (no subscriber relayer on Horizen testnet yet).
+* **Production (intended):** Stork signed data → permissionless `pushOracleUpdate` → deployed `StorkPriceOracle` adapter (official **USDCUSD**/`0x7416a56f222e196d0487dce8a1a8003936862e7a15092a91898d69fa8bce290c` feed). The adapter is deployed and configured; it becomes the live price path when Stork testnet publishing starts (no subscriber relayer on Horizen testnet yet).
 
 ---
 
@@ -80,7 +80,10 @@ Two distinct paths — do not mix:
 | Contract | Address |
 | --- | --- |
 | **VeilLend (UUPS proxy)** | `0xc1e2cDADBf14717DfEE7ffA23EAf2b21e6004a5B` |
-| VeilLend implementation | `0x353EcfaFa07a60f1Ed473ed4cE3F1c2624fF7aa5` |
+| VeilLend implementation | `0xfb8a61658110e47a1f79c0632061e97bc37b2c3d` |
+| **vDBT LiquidityPool (UUPS proxy)** | `0x21Cf3FFE0FF3ccf422c89A0A55fCE1949C84fB57` |
+| **USDC LiquidityPool (UUPS proxy)** | `0xf406448E519345C9D8bc08B606DaB677Cb12aCC1` |
+| LiquidityPool implementation (shared) | `0x3c081adab71c5237ac3b21590dbbc60b26b5967d` |
 | StorkPriceOracle adapter (production path) | `0xa2c0a60B4A360e88cA5f90860A3B75A3DDfED33D` → Stork `0xacC0a0cF13571d30B4b8637996F5D6D774d4fd62` |
 | OwnerMockPriceOracle (Testnet/Demo oracle) | `0x024CF745c737B74f8BCc84d1C73687853310b715` |
 | Groth16Verifier — State Transitions | `0xbdF87292EAAd22dB17C5ADCA3eAC33Db891ab3f1` |
@@ -88,26 +91,7 @@ Two distinct paths — do not mix:
 | RiskTransitionVerifier | `0xB54B51664215ED17F238D52EDD8d5E549D136b26` |
 | LiquidationVerifier | `0xe33b96CC86D3c68119312b9B2274F1e734211daa` |
 | vCOL / vDBT (test mocks) | `0xb5a5b0f1083965B9d92dCd94E5BCdDb868BfcFCE` / `0xe48a8EC02EB14BB52Fe363D3B2A32e264d3B5D7f` |
-| WETH / USDC (ecosystem assets) | `0x4200000000000000000000000000000000000006` / `0x01c7AEb2A0428b4159c0E333712f40e127aF639E` |
-
-`ZEN` is locked (no ZEN/USD Stork feed); USDT is not supported.
-
-Machine-readable record: `deployments/horizenTestnet-uups.json`.
-
-### Historical / Superseded
-
-| Deployment | VeilLend address | Record | Status |
-| --- | --- | --- | --- |
-| First M1 deployment | `0x9fd6477Dd3b5eDB4e55A7D7F962Af0e8e332a9B9` | `deployments/horizenTestnet.json` | Historical — superseded |
-| Repaired M1 deployment | `0xeCB439fbE792Bec4E005f1809E6DCF4FB37d4787` | `deployments/horizenTestnet.json` | Historical — superseded |
-
-Both are **immutable, non-proxy deployments** that were never upgraded; the UUPS proxy is a separate, newer deployment. M1-era on-chain proof/liquidation evidence (summarized in [`docs/MILESTONES.md`](docs/MILESTONES.md) §2.2) was recorded against them. The M1-era `MockPriceOracle` (permissionless `setPrice`) is orphaned — the protocol no longer points at it.
-
----
-
-## Browser Demo
-
-`demo/` is a Next.js frontend (React/TypeScript, wagmi, viem, browser-side `snarkjs`) — **no backend in the proving path** — running against the current UUPS Testnet deployment.
+| USDC (ecosystem debt asset) | `0x01c7AEb2A0428b4159c0E333712f40e127aF639E` |
 
 **Run:**
 
@@ -120,11 +104,11 @@ npm run build && npm start   # production build (Vercel-compatible)
 
 Proving artifacts (`.wasm`/`.zkey`) and the snarkjs browser bundle are included under `demo/public/`.
 
-**Flow:** Connect Wallet (injected; wrong network offers a switch button) → **Create** (collateral/debt pair chosen once, fixed for the position's life; commitment computed locally) → **Deposit** (real `state_transition` proof; custody 1:1) → **Borrow** (`risk_transition` proof, post-borrow solvency, recipient-bound payout from the repayment-funded reserve) → **Repay** → **Withdraw** (proof-gated, custody 1:1). The position card shows only public on-chain data — collateral/debt/health are marked 🔒 private. A progress strip tracks Connect → Create → Deposit → Borrow → Repay → Withdraw.
+**Flow:** Connect Wallet (injected; wrong network offers a switch button) → **Create** (collateral/debt pair chosen once, fixed for the position's life; commitment computed locally) → **Deposit** (real `state_transition` proof; custody 1:1) → **Borrow** (`risk_transition` proof, post-borrow solvency, recipient-bound payout from the asset's liquidity pool) → **Repay** → **Withdraw** (proof-gated, custody 1:1). The position card shows only public on-chain data — collateral/debt/health are marked 🔒 private. A progress strip tracks Connect → Create → Deposit → Borrow → Repay → Withdraw.
 
-**Assets:** vCOL/vDBT (demo mocks, active), WETH/USDC (enabled, priced via the demo relay), ZEN locked.
+**Assets (MVP):** vCOL collateral · vDBT/USDC debt (active, priced via the demo relay) · ZEN locked.
 
-**Price panel:** "Testnet / Demo Price Source — Base Chainlink → Mock Oracle" shows live WETH/USD + USDC/USD and a **Refresh Prices** action (relay-fed, server-side owner signature — users never submit a price). If the relay is offline the panel says so; risk actions need fresh prices.
+**Price panel:** "Testnet / Demo Price Source — Base Chainlink → Mock Oracle" shows live USDC/USD and a **Refresh Prices** action (relay-fed, server-side owner signature — users never submit a price). If the relay is offline the panel says so; risk actions need fresh prices.
 
 **Recovery:** every position offers **Download Recovery File** (`VeilLend-Position-N-Recovery.json`, one encrypted file per position); a browser with no local positions offers **Restore from Recovery File** — file → wallet signature → decrypt → verify against the on-chain commitment → restore. `/recovery-test` and `/sigtest` are developer/test pages. Details: [`demo/lib/recovery/README.md`](demo/lib/recovery/README.md).
 
@@ -132,10 +116,21 @@ Proving artifacts (`.wasm`/`.zkey`) and the snarkjs browser bundle are included 
 
 ---
 
+## Liquidity Pools (lender side)
+
+Each supported debt asset has its own independent UUPS `LiquidityPool` (ERC4626-style), wired to VeilLend via owner-only `setDebtPool`:
+
+* **Lenders** deposit the asset, receive shares, and withdraw up to the pool's free liquidity; claims backed by outstanding loans unlock automatically as borrowers repay (`maxWithdraw`/`maxRedeem` are honest caps).
+* **Economics live in the pool**: fixed annual lender rate (`rateBps`, informational projection via permissionless `accrueInterest`), protocol performance fee on realized interest (`feeBps`, capped at 20%, ring-fenced in `accruedFees` — excluded from lender share value and from lendable liquidity, claimable by the owner to the configured recipient only). VeilLend passes the explicit principal/interest split of every repayment; unrecoverable principal from liquidations or orphaned positions is realized as bad debt via `writeOffBorrows` (socialized across lender shares).
+* **No owner custody path**: fees are the only owner-outflow, and only from realized interest. The ZK/position/risk layer stays entirely in VeilLend; pools never see positions or commitments.
+* Demo lender UI: `demo/app/PoolPanel.tsx` (pool addresses in `demo/lib/contracts/addresses.ts` → `POOLS`).
+
+---
+
 ## Verification Evidence
 
-* **Root protocol suite: 156/156 passing** (`npm test`) — unit, ZK circuit, solvency, risk, supported-collateral, adversarial recipient-binding, liquidation, replay, seeded fuzz/invariant, upgrade, Stork integration, and a local E2E lifecycle over **all six supported asset pairs** with negative cases (unsupported asset, over-borrow, stale oracle, tampered proof, wrong-asset witness, replayed proof, invalid withdrawal, no partial state on failure).
-* **Demo suite: 17/17 passing** (`demo/tests/`).
+* **Root protocol suite: 208/208 passing** (`npm test`) — unit, ZK circuit, solvency, risk, supported-collateral, adversarial recipient-binding, liquidation, replay, seeded fuzz/invariant, upgrade, Stork integration, liquidity-pool economics (explicit principal/interest split, protocol fees, bad-debt write-off, orphan settlement), and a local E2E lifecycle over **all four supported asset pairs** with negative cases (unsupported asset, over-borrow, stale oracle, tampered proof, wrong-asset witness, replayed proof, invalid withdrawal, no partial state on failure).
+* **Demo suite: 23/23 passing** (`demo/tests/` — persistence, recovery, signature determinism, pool math).
 * **On-chain evidence:** real ZK proof transitions and a real confidential liquidation recorded on Testnet — summarized in [`docs/MILESTONES.md`](docs/MILESTONES.md) §2.2 (records in `deployments/*.json`).
 
 ---
@@ -169,17 +164,11 @@ Security posture details and the internal-review fixes (F1–F5): see [`docs/ARC
 
 ---
 
-## Milestones
+## Status & Roadmap
 
-| Milestone | Objective | Status |
-| --------- | --------- | ------ |
-| **M1** | Prove the hard part — everything implemented & tested today | **Implemented / demonstrated** |
-| **M2** | Security & production hardening (external audit, threat model, on-chain recovery) | **Planned — not complete** |
-| **M3** | Mainnet, ecosystem liquidity & real usage | **Planned** |
+Remaining work before production: external security audit, threat model, on-chain recovery for additional edge cases, production oracle activation (Stork), multisig/timelock governance, and mainnet/ecosystem liquidity. Details: **[`docs/MILESTONES.md`](docs/MILESTONES.md)**.
 
-Details and acceptance criteria: **[`docs/MILESTONES.md`](docs/MILESTONES.md)**.
-
-**Base & ecosystem liquidity:** VeilLend will use existing Base ↔ Horizen bridging/ecosystem infrastructure rather than building a bridge. Base-originating assets (WETH, USDC) are already enabled on Testnet; their production liquidity access remains future ecosystem work.
+**Base & ecosystem liquidity:** VeilLend will use existing Base ↔ Horizen bridging/ecosystem infrastructure rather than building a bridge. Base-originating assets (USDC) are enabled on Testnet; their production liquidity access remains future ecosystem work.
 
 ---
 
@@ -189,7 +178,7 @@ Details and acceptance criteria: **[`docs/MILESTONES.md`](docs/MILESTONES.md)**.
 
 ## Project Status
 
-Working testnet prototype for Horizen S2: private position commitments, Groth16 ZK proofs, private solvency, confidential liquidation, replay protection, recipient binding, public accounting safeguards, browser-side proving, encrypted private-state recovery, and a working Horizen Testnet frontend. The release is a **testnet prototype**, unaudited. The Stork production oracle path is implemented and deployed (activation pending); mainnet, real liquidity, and additional hardening remain future milestone work (M2/M3).
+Working testnet prototype on Horizen: private position commitments, Groth16 ZK proofs, private solvency, confidential liquidation, replay protection, recipient binding, public accounting safeguards, browser-side proving, encrypted private-state recovery, and a working Horizen Testnet frontend. The release is a **testnet prototype**, unaudited. The Stork production oracle path is implemented and deployed (activation pending); mainnet, real liquidity, and additional hardening remain future milestone work (M2/M3).
 
 ---
 

@@ -15,3 +15,4 @@ demo/node_modules/
 demo/.next/
 demo/next-env.d.ts
 *.tsbuildinfo
+.witness-store/

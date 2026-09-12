@@ -25,8 +25,8 @@ const config: HardhatUserConfig = {
   },
   networks: {
     horizenTestnet: {
-      // Horizen Testnet (Caldera-hosted) — source of truth for the M1
-      // integration: chainId 2651420, native gas token ETH.
+      // Horizen Testnet (Caldera-hosted) — canonical network for the
+      // current deployment: chainId 2651420, native gas token ETH.
       url: "https://horizen-testnet.rpc.caldera.xyz/http",
       chainId: 2651420,
       accounts: process.env.HORIZEN_TESTNET_PRIVATE_KEY ? [process.env.HORIZEN_TESTNET_PRIVATE_KEY] : [],
@@ -37,7 +37,7 @@ const config: HardhatUserConfig = {
   // hardhat-verify's requirement.
   etherscan: {
     apiKey: {
-      horizenTestnet: "VeilLendHorizenS2Verification",
+      horizenTestnet: "VeilLendVerification", // placeholder — Blockscout ignores the key
     },
     customChains: [
       {

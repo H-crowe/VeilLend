@@ -203,6 +203,8 @@ describe("VeilLend — Phase 2", () => {
         unauthorized.enableCollateralAsset(await fresh.getAddress()),
         unauthorized.enableDebtAsset(await fresh.getAddress(), RATE),
         unauthorized.setRateConfig(await debt.getAddress(), RATE),
+        unauthorized.disableDebtAsset(await debt.getAddress()),
+        unauthorized.setDebtPool(await debt.getAddress(), user.address),
         unauthorized.setOracle(user.address),
         unauthorized.setMaxPriceStaleness(60),
         unauthorized.setPaused(true),
@@ -210,6 +212,84 @@ describe("VeilLend — Phase 2", () => {
         await expect(call).to.be.revertedWithCustomError(veil, "OwnableUnauthorizedAccount").withArgs(user.address);
       }
       expect(await collateral.balanceOf(user.address)).to.equal(1_000_000n * WAD); // untouched
+    });
+
+    it("disableDebtAsset blocks new positions but preserves config, index and custody", async () => {
+      const { veil, owner, collateral, debt } = await loadFixture(deployFixture);
+      const configBefore = await veil.rateConfigs(await debt.getAddress());
+      const indexBefore = await veil.currentDebtIndex(await debt.getAddress());
+      const custodyBefore = await veil.debtCustody(await debt.getAddress());
+
+      await expect(veil.connect(owner).disableDebtAsset(await debt.getAddress()))
+        .to.emit(veil, "DebtAssetDisabled")
+        .withArgs(await debt.getAddress());
+      expect(await veil.debtSupported(await debt.getAddress())).to.equal(false);
+      await expect(veil.createPosition(await collateral.getAddress(), await debt.getAddress(), ethers.id("c")))
+        .to.be.revertedWithCustomError(veil, "AssetNotSupported");
+      // config / index / custody are preserved untouched (no migration)
+      expect(await veil.rateConfigs(await debt.getAddress())).to.deep.equal(configBefore);
+      expect(await veil.currentDebtIndex(await debt.getAddress())).to.equal(indexBefore);
+      expect(await veil.debtCustody(await debt.getAddress())).to.equal(custodyBefore);
+      await expect(veil.connect(owner).disableDebtAsset(await debt.getAddress())).to.be.revertedWithCustomError(veil, "AssetNotSupported");
+    });
+
+    it("migrateCollateralRetirement clears retired collateral config once, fail-safe on custody", async () => {
+      const { veil, owner, user, debt } = await loadFixture(deployFixture);
+      const retired = (await (await ethers.getContractFactory("TokenMock")).deploy("Retired", "RTD")) as TokenMock;
+      await veil.connect(owner).enableCollateralAsset(await retired.getAddress());
+      expect(await veil.collateralSupported(await retired.getAddress())).to.equal(true);
+      expect(await veil.assetDecimals(await retired.getAddress())).to.equal(18n);
+
+      // non-owner cannot run the migration
+      await expect(veil.connect(user).migrateCollateralRetirement([await retired.getAddress()]))
+        .to.be.revertedWithCustomError(veil, "OwnableUnauthorizedAccount");
+
+      // zero address rejected; zero custody → clears the entries
+      await expect(veil.connect(owner).migrateCollateralRetirement([ethers.ZeroAddress]))
+        .to.be.revertedWithCustomError(veil, "ZeroAddress");
+      await veil.connect(owner).migrateCollateralRetirement([await retired.getAddress()]);
+      expect(await veil.collateralSupported(await retired.getAddress())).to.equal(false);
+      expect(await veil.assetDecimals(await retired.getAddress())).to.equal(0n);
+      // new positions on the retired asset are blocked
+      await expect(veil.createPosition(await retired.getAddress(), await debt.getAddress(), ethers.id("c")))
+        .to.be.revertedWithCustomError(veil, "AssetNotSupported");
+      // one-time: reinitializer(2) cannot run twice
+      await expect(veil.connect(owner).migrateCollateralRetirement([await retired.getAddress()]))
+        .to.be.revertedWithCustomError(veil, "InvalidInitialization");
+    });
+
+    it("migrateCollateralRetirement refuses assets still holding custody", async () => {
+      const { veil, owner, user, collateral, debt } = await loadFixture(deployFixture);
+      // deposit into a fresh position so collateralCustody > 0
+      const id = (await veil.nextPositionId()) + 1n;
+      const { state } = await createTrackedPosition(veil, collateral, debt);
+      const t = await proveTransition(state, ACTION_DEPOSIT, 5_000n * WAD, await veil.currentDebtIndex(await debt.getAddress()));
+      await submitDeposit(veil, user, t);
+      expect(await veil.collateralCustody(await collateral.getAddress())).to.be.greaterThan(0n);
+      await expect(veil.connect(owner).migrateCollateralRetirement([await collateral.getAddress()]))
+        .to.be.revertedWithCustomError(veil, "CollateralCustodyNotEmpty");
+      void id;
+    });
+
+    it("setDebtPool wires per-asset pools and requires a supported debt asset", async () => {
+      const { veil, owner, user, collateral, debt } = await loadFixture(deployFixture);
+      expect(await veil.debtPools(await debt.getAddress())).to.equal(ethers.ZeroAddress);
+      // wiring deploys a REAL pool (setDebtPool syncs the borrower rate into
+      // it, so an EOA or arbitrary address must fail)
+      const pool = await upgrades.deployProxy(
+        await ethers.getContractFactory("LiquidityPool"),
+        [await debt.getAddress(), owner.address, await veil.getAddress(), "Pool", "PL"],
+        { kind: "uups" }
+      );
+      await expect(veil.connect(owner).setDebtPool(await debt.getAddress(), await pool.getAddress()))
+        .to.emit(veil, "DebtPoolSet")
+        .withArgs(await debt.getAddress(), await pool.getAddress());
+      expect(await veil.debtPools(await debt.getAddress())).to.equal(await pool.getAddress());
+      // the wiring synced the current borrower accrual rate into the pool
+      expect(await pool.rateBps()).to.equal((await veil.rateConfigs(await debt.getAddress())).baseRateBps);
+      // unwiring back to zero is allowed; unsupported assets are rejected
+      await expect(veil.connect(owner).setDebtPool(await debt.getAddress(), ethers.ZeroAddress)).to.emit(veil, "DebtPoolSet");
+      await expect(veil.connect(owner).setDebtPool(await collateral.getAddress(), user.address)).to.be.revertedWithCustomError(veil, "AssetNotSupported");
     });
 
     it("updates rate config only for supported debt assets", async () => {
@@ -638,7 +718,9 @@ describe("VeilLend — Phase 2", () => {
           "currentDebtIndex",
           "debtCustody",
           "debtIndexStates",
+          "debtPools",
           "debtSupported",
+          "disableDebtAsset",
           "exceedsBorrowCap",
           "deposit",
           "enableCollateralAsset",
@@ -648,6 +730,7 @@ describe("VeilLend — Phase 2", () => {
           "liquidate",
           "liquidationVerifier",
           "maxPriceStaleness",
+          "migrateCollateralRetirement",
           "multicall",
           "nextPositionId",
           "oracle",
@@ -664,6 +747,8 @@ describe("VeilLend — Phase 2", () => {
           "solvencyVerifier",
           "setOracle",
           "setPaused",
+          "setDebtPool",
+          "settleOrphanPosition",
           "setRateConfig",
           "supportedCollateral",
           "setMaxPriceStaleness",
@@ -808,8 +893,11 @@ describe("VeilLend — Phase 2", () => {
         "currentDebtIndex",
         "debtCustody",
         "debtIndexStates",
+        "debtPools",
         "debtSupported",
+        "disableDebtAsset",
         "enableDebtAsset",
+        "setDebtPool",
       ]);
     });
   });

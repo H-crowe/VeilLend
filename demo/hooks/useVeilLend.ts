@@ -180,9 +180,8 @@ export function useVeilLend() {
   useEffect(() => { void refreshOnChain(); }, [address, selectedId, tx.status, refreshOnChain]);
 
   /**
-   * Wallet balances for the ASSETS registry (vCOL/vDBT/WETH/USDC; ZEN has no
-   * address). Read-only display alongside the active pair — WETH/USDC feed
-   * in via Stork once the Stork-backed deployment activates them.
+   * Wallet balances for the ASSETS registry (vCOL/vDBT/USDC; ZEN has no
+   * address). Read-only display alongside the active pair.
    */
   const [assetBalances, setAssetBalances] = useState<Record<string, bigint>>({});
   const refreshAssetBalances = useCallback(async () => {
@@ -273,19 +272,14 @@ export function useVeilLend() {
     return hash;
   }, [getWallet, isConnected, address, publicClient, refreshAllowances]);
 
-  /** Mint any mock testnet asset. WETH is wrapped from chain ETH instead. */
+  /** Mint any mock testnet asset. */
   const mintAsset = useCallback(async (symbol: string, amount: bigint) => {
     if (!isConnected || !address) throw new Error("wallet not connected");
     const walletClient = await getWallet();
     const entry = ASSETS.find((a) => a.symbol === symbol);
     if (!entry || entry.address === "") throw new Error("unknown asset " + symbol);
     setTx({ status: "wallet" });
-    let hash: `0x${string}`;
-    if (symbol === "WETH") {
-      hash = await walletClient.writeContract({ address: entry.address as Address, abi: tokenAbi, functionName: "deposit", args: [], value: amount });
-    } else {
-      hash = await walletClient.writeContract({ address: entry.address as Address, abi: tokenAbi, functionName: "mint", args: [address, amount] });
-    }
+    const hash = await walletClient.writeContract({ address: entry.address as Address, abi: tokenAbi, functionName: "mint", args: [address, amount] });
     setTx((t) => ({ ...t, status: "confirming", txHash: hash }));
     const rec = await publicClient!.waitForTransactionReceipt({ hash });
     assertReceiptSuccess(rec.status, hash);
@@ -338,7 +332,8 @@ export function useVeilLend() {
     const res = await fetch(`${priceRelayUrl}/prices`);
     if (!res.ok) throw new Error(`price relay unreachable (${res.status}) — start it with: node relay/base-price-relay.mjs`);
     const body = (await res.json()) as Record<string, { price1e8?: string; chainlinkUpdatedAt?: number; horizenOracle?: { updatedAt?: number } | null; source?: string }>;
-    return ["WETH", "USDC"].map((sym) => ({
+    // only USDC is surfaced (the relay serves it from Base Chainlink)
+    return ["USDC"].map((sym) => ({
       symbol: sym,
       price1e8: body[sym]?.price1e8 ?? "0",
       source: body[sym]?.source ?? "",
@@ -457,8 +452,8 @@ export function useVeilLend() {
     const walletClient = await getWallet();
     // Asset pair for this action. `create` uses the UI-selected pair; all
     // other actions derive the pair from the position's own private state
-    // (assets are fixed at position creation), so a WETH/USDC position uses
-    // WETH/USDC prices and indices regardless of the dropdowns.
+    // (assets are fixed at position creation), so an existing position uses
+    // its own assets' prices and indices regardless of the dropdowns.
     const collateralAddr = kind === "create" && pair ? pair.collateral : (selectedState ? getAddress("0x" + selectedState.collateralAsset.toString(16).padStart(40, "0")) : ADDRESSES.collateralToken);
     const debtAddr = kind === "create" && pair ? pair.debt : (selectedState ? getAddress("0x" + selectedState.debtAsset.toString(16).padStart(40, "0")) : ADDRESSES.debtToken);
     setTx({ status: "preparing" });

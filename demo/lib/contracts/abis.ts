@@ -7,7 +7,9 @@ import { Abi } from "viem";
 import veilLendAbiJson from "./veilLend.abi.json";
 import tokenAbiJson from "./token.abi.json";
 import oracleAbiJson from "./oracle.abi.json";
+import poolAbiJson from "./pool.abi.json";
 
 export const veilLendAbi = veilLendAbiJson as Abi;
 export const tokenAbi = tokenAbiJson as Abi;
 export const oracleAbi = oracleAbiJson as Abi;
+export const poolAbi = poolAbiJson as Abi;

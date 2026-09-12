@@ -8,7 +8,7 @@
   "deployedAt": "2026-09-07T17:42:14.942Z",
   "addresses": {
     "veilLend": "0xc1e2cDADBf14717DfEE7ffA23EAf2b21e6004a5B",
-    "veilLendImplementation": "0x353EcfaFa07a60f1Ed473ed4cE3F1c2624fF7aa5",
+    "veilLendImplementation": "0xfb8a61658110e47a1f79c0632061e97bc37b2c3d",
     "stateTransitionVerifier": "0xbdF87292EAAd22dB17C5ADCA3eAC33Db891ab3f1",
     "solvencyVerifier": "0x18C104Dc76A6F4Dad6cC1f2E467D9EbC10162676",
     "riskTransitionVerifier": "0xB54B51664215ED17F238D52EDD8d5E549D136b26",
@@ -17,7 +17,6 @@
     "storkOracle": "0xacC0a0cF13571d30B4b8637996F5D6D774d4fd62",
     "collateralToken": "0xb5a5b0f1083965B9d92dCd94E5BCdDb868BfcFCE",
     "debtToken": "0xe48a8EC02EB14BB52Fe363D3B2A32e264d3B5D7f",
-    "WETH": "0x4200000000000000000000000000000000000006",
     "USDC": "0x01c7AEb2A0428b4159c0E333712f40e127aF639E",
     "supersededPreDeployImpl": "0x2bD5ec9895bDCC8968DAa1C26c3Da120F0D7Cf9B",
     "mockPriceOracle": "0x024CF745c737B74f8BCc84d1C73687853310b715"
@@ -84,20 +83,12 @@
       "block": "27212982"
     },
     {
-      "label": "adapter.setFeedId(WETH, ETHUSD)",
-      "txHash": "0x147f0d340c7eee752f83bf1e2f3c106e2006f7aa33df2b5aae836d4b49efd712"
-    },
-    {
       "label": "adapter.setFeedId(USDC, USDCUSD)",
       "txHash": "0x024db3c62238597de5ee5804cd309c1185c2f449086056657bfa97d39d60439e"
     },
     {
       "label": "enableCollateralAsset(vCOL)",
       "txHash": "0x41fd3b97cb28202c883174782beeb3db852d3769992b2d5bdc3f61ffe4eed850"
-    },
-    {
-      "label": "enableCollateralAsset(WETH)",
-      "txHash": "0xc838633d54008abc4ccf325d0b69292eb7fe41047683d6b7d0ec8f778ef88de5"
     },
     {
       "label": "enableCollateralAsset(USDC)",
@@ -110,13 +101,21 @@
     {
       "label": "enableDebtAsset(USDC)",
       "txHash": "0xe50a4322c34b5f8c3bbad4feb78e6bbcb67bb9a6c082941a902593e5fd37203c"
+    },
+    {
+      "label": "UUPS upgrade + migrateCollateralRetirement([WETH])",
+      "txHash": "0xedce164ed12c8b9a4daf7212050f01f6ec0d3f97465667fd69c63b732cac9df8"
+    },
+    {
+      "label": "UUPS upgrade: VeilLend → pool-accounting implementation",
+      "txHash": "0xa7c15be44319c241ba5b0380869e0010ae8124f94e401b5a95b019b32cb0eb0d",
+      "block": 27630741
     }
   ],
   "configuration": {
     "assets": {
       "collateral": [
         "vCOL (18)",
-        "WETH (18)",
         "USDC (6)"
       ],
       "debt": [
@@ -126,7 +125,6 @@
       "zen": "NOT enabled (locked — no Stork ZEN/USD feed)"
     },
     "feeds": {
-      "WETH": "keccak256(ETHUSD) 0x59102b37…7160",
       "USDC": "keccak256(USDCUSD) 0x7416a56f…290c"
     },
     "maxLtvBps": 7500,
@@ -136,13 +134,12 @@
   "postDeployChecks": "28 PASS / 0 FAIL (incl. ERC-1967 slot, owner, verifiers, feeds, decimals, UUPS auth both directions)",
   "explorerVerification": "All 9 contracts + proxy verified and proxy linked to implementation",
   "oracleUpdate": {
-    "note": "VeilLend now points at the owner-gated OwnerMockPriceOracle (relay-fed from Base Chainlink; TESTNET/DEMO ONLY). The permissionless original MockPriceOracle was NOT reused for security. Stork adapter remains deployed and intact with WETHUSD/USDCUSD feeds for the production path.",
+    "note": "VeilLend now points at the owner-gated OwnerMockPriceOracle (relay-fed from Base Chainlink; TESTNET/DEMO ONLY). The permissionless original MockPriceOracle was NOT reused for security. Stork adapter remains deployed and intact with USDCUSD feeds for the production path.",
     "ownerMockPriceOracleDeploymentTx": "0xb21adc093e86168a2db961d4c0a1b3d7ba47fea419d858bb634d5a258a89144e",
     "setOracleTx": "0xbea668c8af0850abcbd274b0dc3ce5c9287bb5941e4ea6de6d27db4de1956b55",
-    "storkWethFeedCorrectionTx": "0x0cf9d68abca65be3aa9efc6bc9147dfc8a89ec2981d60ad918159615714f0161",
     "storkFeeds": {
-      "WETH": "keccak256(WETHUSD) 0x8afba5f1a5d4969d23c3b42db1b88f8a9c8176392de5bf066752260478ce82b8",
       "USDC": "keccak256(USDCUSD) 0x7416a56f222e196d0487dce8a1a8003936862e7a15092a91898d69fa8bce290c"
-    }
+    },
+    "storkFeedCorrectionTx": "0x0cf9d68abca65be3aa9efc6bc9147dfc8a89ec2981d60ad918159615714f0161"
   }
 }

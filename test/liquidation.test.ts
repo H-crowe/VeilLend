@@ -1,10 +1,11 @@
 import { expect } from "chai";
-import { ethers } from "hardhat";
+import { ethers, upgrades } from "hardhat";
 import { loadFixture, time } from "@nomicfoundation/hardhat-network-helpers";
-import type { MockPriceOracle, TokenMock, VeilLend } from "../typechain-types";
+import type { LiquidityPool, MockPriceOracle, TokenMock, VeilLend } from "../typechain-types";
 import {
   ACTION_BORROW,
   ACTION_DEPOSIT,
+  ACTION_REPAY,
   LiquidationParams,
   RiskParams,
   buildLiquidationWitness,
@@ -73,6 +74,21 @@ async function deployFixture() {
 }
 
 /** Creates + funds a position with the given private collateral/debt. */
+async function wiredPoolFixture() {
+  const f = await loadFixture(deployFixture);
+  const pool = (await upgrades.deployProxy(
+    await ethers.getContractFactory("LiquidityPool"),
+    [await f.debt.getAddress(), f.owner.address, await f.veil.getAddress(), "Veil DBT Pool", "vlDBTP"],
+    { kind: "uups" },
+  )) as LiquidityPool;
+  await f.veil.connect(f.owner).setDebtPool(await f.debt.getAddress(), await pool.getAddress());
+  await f.debt.mint(f.owner.address, 100n * WAD);
+  await f.debt.connect(f.owner).approve(await pool.getAddress(), ethers.MaxUint256);
+  await pool.connect(f.owner).deposit(50n * WAD, f.owner.address);
+  return { ...f, pool, lender: f.owner };
+}
+
+
 async function setupPosition(
   veil: VeilLend,
   collateral: TokenMock,
@@ -343,7 +359,8 @@ describe("Phase 3 M3 — liquidation eligibility + confidential settlement", () 
       const b = await buildRiskTransition({
         oldState: afterDeposit, actionId: ACTION_BORROW, amount: BORROW,
         currentIndex: await veil.currentDebtIndex(await debt.getAddress()),
-        newSalt: BigInt(randHex()), params: RISK, recipient: BigInt(user.address),
+        newSalt: BigInt(randHex()),
+        params: { collateralPrice: PARAMS.collateralPrice, debtPrice: PARAMS.debtPrice, maxLtvBps: 7500n }, recipient: BigInt(user.address),
       });
       const bProof = await generateProof(b.inputs, "risk_transition");
       const bps = b.publicSignals;
@@ -480,6 +497,268 @@ describe("Phase 3 M3 — liquidation eligibility + confidential settlement", () 
       await expect(veil.setRateConfig(await debt.getAddress(), { ...base, liquidationThresholdBps: 10_000 })).to.emit(veil, "RateConfigUpdated");
       expect((await veil.rateConfigs(await debt.getAddress())).liquidationThresholdBps).to.equal(10_000n);
       void collateral;
+    });
+  });
+
+  describe("Liquidation × LiquidityPool accounting (wired pool)", () => {
+    // Deploys a LiquidityPool, wires it as the debt asset's pool, and funds it
+    // with 50 WAD of lender liquidity. Liquidation then borrows from and
+    // settles against this pool.
+    it("partial liquidation recovers principal, writes off the residual as bad debt, and leaves NO ghost in totalBorrows", async () => {
+      const { veil, pool, owner, lender, user, liquidator, collateral, debt, oracle } = await loadFixture(wiredPoolFixture);
+
+      // borrower: deposit 100 vCOL, borrow 10 DBT — funded by the POOL
+      const { id, state } = await setupPosition(veil, collateral, debt, user, 0n, 0n);
+      const idx0 = await veil.currentDebtIndex(await debt.getAddress());
+      const dep = await buildTransition({ oldState: state, actionId: ACTION_DEPOSIT, amount: 100n * WAD, currentIndex: idx0, newSalt: BigInt(randHex()) });
+      const depProof = await generateProof(dep.inputs);
+      const dps = dep.publicSignals;
+      await veil.connect(user as never).deposit(
+        { positionId: dps[0], oldCommitment: dps[1], newCommitment: dps[2], nullifier: dps[3], actionId: dps[4], newSequence: dps[5], currentIndexLo: dps[6], currentIndexHi: dps[7], publicAmount: dps[8] },
+        depProof.callArgs.pA, depProof.callArgs.pB, depProof.callArgs.pC,
+      );
+
+      const BORROW = 10n * WAD;
+      const b = await buildRiskTransition({
+        oldState: dep.newState, actionId: ACTION_BORROW, amount: BORROW,
+        currentIndex: await veil.currentDebtIndex(await debt.getAddress()),
+        newSalt: BigInt(randHex()),
+        params: { collateralPrice: PARAMS.collateralPrice, debtPrice: PARAMS.debtPrice, maxLtvBps: 7500n }, recipient: BigInt(user.address),
+      });
+      const bProof = await generateProof(b.inputs, "risk_transition");
+      const bps = b.publicSignals;
+      await veil.connect(user as never).borrow(
+        { positionId: bps[0], oldCommitment: bps[1], newCommitment: bps[2], nullifier: bps[3], actionId: bps[4], newSequence: bps[5], currentIndexLo: bps[6], currentIndexHi: bps[7], publicAmount: bps[8] },
+        bProof.callArgs.pA, bProof.callArgs.pB, bProof.callArgs.pC,
+      );
+      expect(await pool.totalBorrows()).to.equal(10n * WAD); // pool-funded borrow
+      expect(await pool.availableLiquidity()).to.equal(40n * WAD); // 50 − 10
+
+      // price drop: vCOL $2 → $0.05 → 100 vCOL parity = 5 DBT < 10 DBT debt
+      await oracle.setPrice(await collateral.getAddress(), 5n * 10n ** 6n);
+      const dropped: LiquidationParams = { collateralPrice: 5n * 10n ** 6n, debtPrice: PARAMS.debtPrice, liquidationThresholdBps: PARAMS.liquidationThresholdBps };
+      const w = await buildLiquidationWitness(b.newState, dropped, BigInt(liquidator.address));
+      const { callArgs } = await generateProof(w.inputs, "liquidation");
+      const args = toLiquidationArgs(w.publicSignals);
+
+      await expect(veil.connect(liquidator).liquidate(id, args.collateralOut, args.debtOut, callArgs.pA, callArgs.pB, callArgs.pC))
+        .to.emit(veil, "Liquidated")
+        .withArgs(id, await collateral.getAddress(), await debt.getAddress(), 100n * WAD, 5n * WAD)
+        .and.to.emit(pool, "RepaymentReceived")
+        .and.to.emit(pool, "BorrowsWrittenOff");
+
+      // pool accounting: principal recovered 5, residual 5 written off — NO ghost
+      // tokens: 50 − 10 lent + 5 repaid = 45; borrows: 10 − 5 recovered − 5 written off = 0
+      expect(await pool.totalBorrows()).to.equal(0n);
+      expect(await pool.totalAssets()).to.equal(45n * WAD);
+      expect(await pool.availableLiquidity()).to.equal(45n * WAD);
+      expect(await pool.accruedFees()).to.equal(0n); // principal recovery never generates a fee
+      // lender share value reflects the realized loss: 50 backing → 45 (5 bad debt)
+      expect(await pool.convertToAssets(await pool.balanceOf(lender.address))).to.equal(45n * WAD);
+
+      // position closed and written off in VeilLend
+      expect(await veil.borrowOutstanding(id)).to.equal(0n);
+      expect((await veil.positions(id)).status).to.equal(2n); // Closed
+      // re-liquidation cannot occur
+      await expect(veil.connect(liquidator).liquidate(id, args.collateralOut, args.debtOut, callArgs.pA, callArgs.pB, callArgs.pC))
+        .to.be.revertedWithCustomError(veil, "PositionNotActive");
+      // legacy debtCustody untouched (pool path used)
+      expect(await veil.debtCustody(await debt.getAddress())).to.equal(0n);
+    });
+
+    it("full repayment after a partial liquidation keeps pool accounting consistent", async () => {
+      const { veil, pool, owner, lender, user, liquidator, collateral, debt, oracle } = await loadFixture(wiredPoolFixture);
+
+      const { id, state } = await setupPosition(veil, collateral, debt, user, 0n, 0n);
+      const idx0 = await veil.currentDebtIndex(await debt.getAddress());
+      const dep = await buildTransition({ oldState: state, actionId: ACTION_DEPOSIT, amount: 100n * WAD, currentIndex: idx0, newSalt: BigInt(randHex()) });
+      const depProof = await generateProof(dep.inputs);
+      const dps = dep.publicSignals;
+      await veil.connect(user as never).deposit(
+        { positionId: dps[0], oldCommitment: dps[1], newCommitment: dps[2], nullifier: dps[3], actionId: dps[4], newSequence: dps[5], currentIndexLo: dps[6], currentIndexHi: dps[7], publicAmount: dps[8] },
+        depProof.callArgs.pA, depProof.callArgs.pB, depProof.callArgs.pC,
+      );
+
+      const BORROW = 10n * WAD;
+      const b = await buildRiskTransition({
+        oldState: dep.newState, actionId: ACTION_BORROW, amount: BORROW,
+        currentIndex: await veil.currentDebtIndex(await debt.getAddress()),
+        newSalt: BigInt(randHex()),
+        params: { collateralPrice: PARAMS.collateralPrice, debtPrice: PARAMS.debtPrice, maxLtvBps: 7500n }, recipient: BigInt(user.address),
+      });
+      const bProof = await generateProof(b.inputs, "risk_transition");
+      const bps = b.publicSignals;
+      await veil.connect(user as never).borrow(
+        { positionId: bps[0], oldCommitment: bps[1], newCommitment: bps[2], nullifier: bps[3], actionId: bps[4], newSequence: bps[5], currentIndexLo: bps[6], currentIndexHi: bps[7], publicAmount: bps[8] },
+        bProof.callArgs.pA, bProof.callArgs.pB, bProof.callArgs.pC,
+      );
+
+      // partial liquidation: parity 5 DBT → bad debt 5 DBT realized
+      await oracle.setPrice(await collateral.getAddress(), 5n * 10n ** 6n);
+      const dropped: LiquidationParams = { collateralPrice: 5n * 10n ** 6n, debtPrice: PARAMS.debtPrice, liquidationThresholdBps: PARAMS.liquidationThresholdBps };
+      const w = await buildLiquidationWitness(b.newState, dropped, BigInt(liquidator.address));
+      const { callArgs } = await generateProof(w.inputs, "liquidation");
+      const args = toLiquidationArgs(w.publicSignals);
+      await veil.connect(liquidator).liquidate(id, args.collateralOut, args.debtOut, callArgs.pA, callArgs.pB, callArgs.pC);
+      expect(await pool.totalBorrows()).to.equal(0n); // no ghost
+
+      // a NEW borrower can still borrow the repaid principal from the pool
+      const user2 = (await ethers.getSigners())[3];
+      await debt.mint(user2.address, 1_000_000n * WAD);
+      await collateral.mint(user2.address, 1_000_000n * WAD);
+      await collateral.connect(user2).approve(await veil.getAddress(), ethers.MaxUint256);
+      await debt.connect(user2).approve(await veil.getAddress(), ethers.MaxUint256);
+      const { id: id2, state: state2 } = await setupPosition(veil, collateral, debt, user2, 0n, 0n);
+      const idxA = await veil.currentDebtIndex(await debt.getAddress());
+      // at the dropped vCOL price, 1000 vCOL is needed to keep the 10 DBT borrow solvent
+      const dep2 = await buildTransition({ oldState: state2, actionId: ACTION_DEPOSIT, amount: 1000n * WAD, currentIndex: idxA, newSalt: BigInt(randHex()) });
+      const dep2P = await generateProof(dep2.inputs);
+      const d2ps = dep2.publicSignals;
+      await veil.connect(user2 as never).deposit(
+        { positionId: d2ps[0], oldCommitment: d2ps[1], newCommitment: d2ps[2], nullifier: d2ps[3], actionId: d2ps[4], newSequence: d2ps[5], currentIndexLo: d2ps[6], currentIndexHi: d2ps[7], publicAmount: d2ps[8] },
+        dep2P.callArgs.pA, dep2P.callArgs.pB, dep2P.callArgs.pC,
+      );
+      const b2 = await buildRiskTransition({
+        oldState: dep2.newState, actionId: ACTION_BORROW, amount: BORROW,
+        currentIndex: await veil.currentDebtIndex(await debt.getAddress()),
+        newSalt: BigInt(randHex()),
+        // live DROPPED prices: the proof must carry the same values the
+        // contract derives on-chain at execution time
+        params: { collateralPrice: 5n * 10n ** 6n, debtPrice: PARAMS.debtPrice, maxLtvBps: 7500n }, recipient: BigInt(user2.address),
+      });
+      const b2P = await generateProof(b2.inputs, "risk_transition");
+      const b2ps = b2.publicSignals;
+      await veil.connect(user2 as never).borrow(
+        { positionId: b2ps[0], oldCommitment: b2ps[1], newCommitment: b2ps[2], nullifier: b2ps[3], actionId: b2ps[4], newSequence: b2ps[5], currentIndexLo: b2ps[6], currentIndexHi: b2ps[7], publicAmount: b2ps[8] },
+        b2P.callArgs.pA, b2P.callArgs.pB, b2P.callArgs.pC,
+      );
+      expect(await pool.totalBorrows()).to.equal(10n * WAD); // recycled liquidity lent again
+      // full repayment closes the cycle cleanly
+      const rep = await buildTransition({ oldState: b2.newState, actionId: ACTION_REPAY, amount: BORROW, currentIndex: await veil.currentDebtIndex(await debt.getAddress()), newSalt: BigInt(randHex()) });
+      const repP = await generateProof(rep.inputs);
+      const rps = rep.publicSignals;
+      await veil.connect(user2 as never).repay(
+        { positionId: rps[0], oldCommitment: rps[1], newCommitment: rps[2], nullifier: rps[3], actionId: rps[4], newSequence: rps[5], currentIndexLo: rps[6], currentIndexHi: rps[7], publicAmount: rps[8] },
+        repP.callArgs.pA, repP.callArgs.pB, repP.callArgs.pC,
+      );
+      expect(await pool.totalBorrows()).to.equal(0n);
+      expect(await pool.totalAssets()).to.equal(45n * WAD); // unchanged (principal-only cycle)
+      expect(await pool.accruedFees()).to.equal(0n);
+      expect(await pool.availableLiquidity()).to.equal(45n * WAD);
+      void owner; void lender; void debt; void collateral; void time;
+    });
+  });
+
+  describe("Orphan settlement (settleOrphanPosition, owner-only)", () => {
+    it("full settlement: owner pays the pool debt and receives the entire collateral; no bad debt, no fee", async () => {
+      const { veil, pool, owner, user, liquidator, collateral, debt, oracle } = await loadFixture(wiredPoolFixture);
+
+      const { id, state } = await setupPosition(veil, collateral, debt, user, 0n, 0n);
+      const idx0 = await veil.currentDebtIndex(await debt.getAddress());
+      const dep = await buildTransition({ oldState: state, actionId: ACTION_DEPOSIT, amount: 10n * WAD, currentIndex: idx0, newSalt: BigInt(randHex()) });
+      const depProof = await generateProof(dep.inputs);
+      const dps = dep.publicSignals;
+      await veil.connect(user as never).deposit(
+        { positionId: dps[0], oldCommitment: dps[1], newCommitment: dps[2], nullifier: dps[3], actionId: dps[4], newSequence: dps[5], currentIndexLo: dps[6], currentIndexHi: dps[7], publicAmount: dps[8] },
+        depProof.callArgs.pA, depProof.callArgs.pB, depProof.callArgs.pC,
+      );
+      const BORROW = 5n * WAD;
+      const b = await buildRiskTransition({
+        oldState: dep.newState, actionId: ACTION_BORROW, amount: BORROW,
+        currentIndex: await veil.currentDebtIndex(await debt.getAddress()),
+        newSalt: BigInt(randHex()),
+        params: { collateralPrice: PARAMS.collateralPrice, debtPrice: PARAMS.debtPrice, maxLtvBps: 7500n }, recipient: BigInt(user.address),
+      });
+      const bProof = await generateProof(b.inputs, "risk_transition");
+      const bps = b.publicSignals;
+      await veil.connect(user as never).borrow(
+        { positionId: bps[0], oldCommitment: bps[1], newCommitment: bps[2], nullifier: bps[3], actionId: bps[4], newSequence: bps[5], currentIndexLo: bps[6], currentIndexHi: bps[7], publicAmount: bps[8] },
+        bProof.callArgs.pA, bProof.callArgs.pB, bProof.callArgs.pC,
+      );
+      expect(await veil.borrowOutstanding(id)).to.equal(BORROW);
+      expect(await veil.supportedCollateral(id)).to.equal(10n * WAD);
+
+      // owner pays the pool debt (10 DBT — capped by pool.totalBorrows) and
+      // receives the full 10 vCOL collateral (parity 20 DBT > debt 10 DBT →
+      // the value surplus stays embedded in the recovered collateral)
+      await debt.connect(owner).approve(await veil.getAddress(), ethers.MaxUint256);
+      const ownerDebtBefore = await debt.balanceOf(owner.address);
+      const ownerColBefore = await collateral.balanceOf(owner.address);
+      await debt.connect(owner).approve(await veil.getAddress(), ethers.MaxUint256); // settle pulls parity from the owner
+      await expect(veil.connect(owner).settleOrphanPosition(id))
+        .to.emit(veil, "OrphanPositionSettled")
+        .withArgs(id, 10n * WAD, BORROW);
+      expect(ownerDebtBefore - (await debt.balanceOf(owner.address))).to.equal(BORROW); // owner PAID the pool debt
+      expect((await collateral.balanceOf(owner.address)) - ownerColBefore).to.equal(10n * WAD); // received the collateral
+
+      // accounting: pool borrows cleared, position closed, no fee, no ghost
+      expect(await pool.totalBorrows()).to.equal(0n);
+      expect(await pool.accruedFees()).to.equal(0n);
+      expect(await pool.totalAssets()).to.equal(50n * WAD); // unchanged (principal repaid = internal transfer)
+      expect(await veil.borrowOutstanding(id)).to.equal(0n);
+      expect(await veil.supportedCollateral(id)).to.equal(0n);
+      expect(await veil.collateralCustody(await collateral.getAddress())).to.equal(0n);
+      expect((await veil.positions(id)).status).to.equal(2n); // Closed
+      // re-settlement rejected: the position is Closed (PositionNotActive fires first)
+      await expect(veil.connect(owner).settleOrphanPosition(id)).to.be.revertedWithCustomError(veil, "PositionNotActive");
+    });
+
+    it("shortfall branch: collateral below debt realizes exactly the residual as bad debt", async () => {
+      const { veil, pool, owner, user, liquidator, collateral, debt, oracle } = await loadFixture(wiredPoolFixture);
+
+      const { id, state } = await setupPosition(veil, collateral, debt, user, 0n, 0n);
+      const idx0 = await veil.currentDebtIndex(await debt.getAddress());
+      const dep = await buildTransition({ oldState: state, actionId: ACTION_DEPOSIT, amount: 2n * WAD, currentIndex: idx0, newSalt: BigInt(randHex()) });
+      const depProof = await generateProof(dep.inputs);
+      const dps = dep.publicSignals;
+      await veil.connect(user as never).deposit(
+        { positionId: dps[0], oldCommitment: dps[1], newCommitment: dps[2], nullifier: dps[3], actionId: dps[4], newSequence: dps[5], currentIndexLo: dps[6], currentIndexHi: dps[7], publicAmount: dps[8] },
+        depProof.callArgs.pA, depProof.callArgs.pB, depProof.callArgs.pC,
+      );
+      const BORROW = 3n * WAD; // 2 vCOL @ $2 = $4 → 75% LTV, allowed
+      const b = await buildRiskTransition({
+        oldState: dep.newState, actionId: ACTION_BORROW, amount: BORROW,
+        currentIndex: await veil.currentDebtIndex(await debt.getAddress()),
+        newSalt: BigInt(randHex()),
+        params: { collateralPrice: PARAMS.collateralPrice, debtPrice: PARAMS.debtPrice, maxLtvBps: 7500n }, recipient: BigInt(user.address),
+      });
+      const bProof = await generateProof(b.inputs, "risk_transition");
+      const bps = b.publicSignals;
+      await veil.connect(user as never).borrow(
+        { positionId: bps[0], oldCommitment: bps[1], newCommitment: bps[2], nullifier: bps[3], actionId: bps[4], newSequence: bps[5], currentIndexLo: bps[6], currentIndexHi: bps[7], publicAmount: bps[8] },
+        bProof.callArgs.pA, bProof.callArgs.pB, bProof.callArgs.pC,
+      );
+      expect(await veil.borrowOutstanding(id)).to.equal(BORROW);
+
+      // price drop: vCOL $2 → $0.05 → orphan parity = 2 vCOL × $0.05 = 0.1 DBT
+      // < 3 DBT outstanding → shortfall 2.9 DBT realized as bad debt
+      await oracle.setPrice(await collateral.getAddress(), 5n * 10n ** 6n);
+      const ownerDebtBefore = await debt.balanceOf(owner.address);
+      const ownerColBefore = await collateral.balanceOf(owner.address);
+      await debt.connect(owner).approve(await veil.getAddress(), ethers.MaxUint256); // settle pulls parity from the owner
+      await expect(veil.connect(owner).settleOrphanPosition(id))
+        .to.emit(veil, "OrphanPositionSettled")
+        .withArgs(id, 2n * WAD, 3n * WAD) // total debt closed (pool-level write-off asserted via totalBorrows)
+        .and.to.emit(pool, "RepaymentReceived")
+        .and.to.emit(pool, "BorrowsWrittenOff");
+
+      // pool: principal recovered 0.1, residual 2.9 written off — no ghost
+      expect(await pool.totalBorrows()).to.equal(0n);
+      expect(await pool.totalAssets()).to.equal(471n * 10n ** 17n); // 50 − 3 lent + 0.1 repaid − 2.9 written off = 47.1 DBT
+      expect(await pool.accruedFees()).to.equal(0n); // principal recovery never generates a fee
+      // position closed, ledger cleared
+      expect(await veil.borrowOutstanding(id)).to.equal(0n);
+      expect(await veil.supportedCollateral(id)).to.equal(0n);
+      expect((await veil.positions(id)).status).to.equal(2n); // Closed
+      // owner paid the parity (0.1 DBT) and received the collateral (2 vCOL)
+      expect(ownerDebtBefore - (await debt.balanceOf(owner.address))).to.equal(1n * 10n ** 17n);
+      expect((await collateral.balanceOf(owner.address)) - ownerColBefore).to.equal(2n * WAD);
+      void liquidator; void oracle;
+    });
+
+    it("settleOrphanPosition is owner-only", async () => {
+      const { veil, user } = await loadFixture(wiredPoolFixture);
+      await expect(veil.connect(user).settleOrphanPosition(1n)).to.be.revertedWithCustomError(veil, "OwnableUnauthorizedAccount");
     });
   });
 });

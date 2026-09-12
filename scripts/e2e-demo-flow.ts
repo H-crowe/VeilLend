@@ -1,7 +1,12 @@
 /**
- * VeilLend — REAL testnet E2E mirroring the guided Demo flow end-to-end,
- * including the setup steps (mint / wrap / approve / price refresh) and the
- * client-side preflight guards the Demo performs before asking the wallet.
+ * [LEGACY — pre-pool era] VeilLend — REAL testnet E2E mirroring the guided
+ * Demo flow end-to-end, including the setup steps (mint / approve / price
+ * refresh) and the client-side preflight guards the Demo performs before
+ * asking the wallet. Written before the LiquidityPool integration: it funds
+ * borrows through the legacy debtCustody reserve (seed-position repay) and
+ * writes `deployments/demo-e2e-uups.json` (a record retired in the repository
+ * cleanup). For the current pool-funded lifecycle use `scripts/e2e-uups.ts`
+ * and `scripts/pool-interest-e2e.ts` instead.
  *
  * Run: npx hardhat run scripts/e2e-demo-flow.ts --network horizenTestnet
  */
@@ -19,7 +24,6 @@ const bytes32 = (v: bigint) => ethers.zeroPadValue(ethers.toBeHex(v), 32);
 const WAD = 10n ** 18n;
 
 const BASE_FEEDS = {
-  WETH: { feed: "0x50015f8b17fb2C290Dde41fDc246ed0dcEE93a8b", target: "0x4200000000000000000000000000000000000006", maxAgeSecs: 2 * 3600 },
   USDC: { feed: "0x01Bab8761d882A3d34690f515EB3126455501bB5", target: "0x01c7AEb2A0428b4159c0E333712f40e127aF639E", maxAgeSecs: 48 * 3600 },
   vCOL: { fixed1e8: 2n * 10n ** 8n, target: "0xb5a5b0f1083965B9d92dCd94E5BCdDb868BfcFCE" },
   vDBT: { fixed1e8: 1n * 10n ** 8n, target: "0xe48a8EC02EB14BB52Fe363D3B2A32e264d3B5D7f" },
@@ -55,8 +59,8 @@ async function main() {
   ], user);
 
   // ---------- STEP 1: setup — mint / wrap / approve (demo Setup panel) ----------
-  const vcol = token(A.collateralToken), vdbt = token(A.debtToken), weth = token(A.WETH);
-  const MINT_VCOL = 100n * WAD, MINT_VDBT = 100n * WAD, WRAP = 2n * WAD / 100n;
+  const vcol = token(A.collateralToken), vdbt = token(A.debtToken);
+  const MINT_VCOL = 100n * WAD, MINT_VDBT = 100n * WAD;
 
   // preflight guard (demo): zero balance blocks deposit — verify the guard condition
   const vcolBal0 = await vcol.balanceOf(user.address);
@@ -72,10 +76,6 @@ async function main() {
     const t = await (await vdbt.mint(user.address, MINT_VDBT)).wait();
     rec("mint 100 vDBT", t?.hash, t?.status === 1, "repay + seeding funds");
   } else rec("mint 100 vDBT", null, true, "already funded");
-  if ((await weth.balanceOf(user.address)) < WRAP) {
-    const t = await (await weth.deposit({ value: WRAP })).wait();
-    rec("wrap 0.02 ETH → WETH", t?.hash, t?.status === 1, "WETH balance now " + (await weth.balanceOf(user.address)).toString());
-  } else rec("wrap ETH → WETH", null, true, "already funded");
 
   // preflight guard (demo): insufficient allowance triggers auto-approve
   for (const [sym, tok] of [["vCOL", vcol], ["vDBT", vdbt]] as const) {
@@ -105,7 +105,7 @@ async function main() {
   const oracle = new ethers.Contract(A.mockPriceOracle, ["function setPrices(address[],uint256[])", "function getPrice(address) view returns (uint256,uint256)"], user);
   const tPrice = await (await oracle.setPrices(entries.map((e) => e[0]), entries.map((e) => e[1]))).wait();
   rec("price relay refresh (Base Chainlink → OwnerMockPriceOracle)", tPrice?.hash, tPrice?.status === 1,
-    `WETH $${(Number(entries[0][1]) / 1e8).toFixed(4)} · USDC $${(Number(entries[1][1]) / 1e8).toFixed(4)} · vCOL $2 · vDBT $1`);
+    `USDC $${entries.length > 0 ? (Number(entries[0][1]) / 1e8).toFixed(4) : "?"} · vCOL $2 · vDBT $1`);
 
   // ---------- STEP 2: create position (vCOL → vDBT) ----------
   const id = (await veil.nextPositionId()) + 1n;

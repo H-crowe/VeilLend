@@ -6,7 +6,7 @@
 > constructions in use, the solvency/liquidation design, the oracle design,
 > and the honest boundary between what is private and what is public.
 > Statuses are honest: nothing claims to be complete if it is not.
-> Milestone status lives in [`docs/MILESTONES.md`](MILESTONES.md).
+> Current deployment state and remaining work live in [`docs/MILESTONES.md`](MILESTONES.md).
 
 ---
 
@@ -254,8 +254,9 @@ collateralCustody(asset) == Σ hidden collateral of all positions  (tested invar
 ```
 
 The per-position split stays hidden: on-chain state stores only the aggregate.
-`debtCustody(asset)` similarly accumulates repaid tokens (protocol reserve
-until the private supply side exists). `closePosition` remains the only
+`debtCustody(asset)` accumulates repaid debt tokens for assets whose pool is
+not wired; wired assets route repayments and liquidation settlements to their
+LiquidityPool instead (§11a). `closePosition` remains the only
 fail-closed-unimplemented action (`UnsupportedAction`) — no plaintext fallback
 exists for any action.
 
@@ -367,9 +368,9 @@ require: newCollateral·collPrice·10000 ≥ newDebt·debtPrice·maxLtvBps
 ```
 
 On-chain, after proof verification: nullifier consumed, commitment/sequence/
-snapshot advanced, `borrowAmount` paid out of `debtCustody[debtAsset]` (the
-repayment-funded reserve). If the reserve is short the transaction reverts
-(`InsufficientLiquidity`) — the proof alone never creates liquidity.
+snapshot advanced, `borrowAmount` paid out of the asset's wired LiquidityPool
+(`poolDebtLeg` pulled from pool liquidity — see §11a). If the pool is short
+the transaction reverts — the proof alone never creates liquidity.
 
 ### 9.3 Withdraw authorization (actionId 4)
 
@@ -398,17 +399,22 @@ debtOut       = min(debt, ceil(collateral * collateralPrice / debtPrice))
 `collateralOut`/`debtOut` are public signals: the tokens they denote move at
 the public ERC20 layer in the settlement anyway, so publishing them reveals
 nothing beyond what the settlement itself shows. Parity pricing: the liquidator
-pays exactly the debt-value of the seized collateral (capped at the full hidden
-debt). **No liquidation bonus/incentive** — documented limitation. Residual
-hidden debt (`debt − debtOut`) is written off when the position closes:
-**socialized bad debt**, absorbed by the protocol in this PoC (no reserve/loss
-accounting yet).
+pays exactly the oracle-parity debt-value of the seized collateral (capped at
+the full hidden debt). **No liquidation bonus/incentive** — documented
+limitation. On settlement, the paid amount reduces the position's outstanding
+principal first (`totalBorrows` drops by the recovered principal); any
+remaining outstanding principal after a partial recovery is realized as bad
+debt via `pool.writeOffBorrows()`: `totalBorrows` and `totalAssets` drop
+together, socializing the loss across lender share value. The settlement is
+principal recovery — it never generates interest or protocol fees.
 
 Settlement flow (`VeilLend.liquidate`): canonicality + amount checks →
 position Active + fresh prices + configured threshold → public signals built
 on-chain → Groth16 verify (`InvalidProof` on failure) → custody moves 1:1,
-debt pulled from the liquidator, position → Closed, collateral transferred,
-`Liquidated` emitted. `liquidate` is `whenNotPaused`; replay-proof (closed
+debt pulled from the liquidator and settled into the asset's wired LiquidityPool
+(recovered principal → `onRepayment`; unrecovered residual →
+`writeOffBorrows` — see §11a), position → Closed, collateral
+transferred, `Liquidated` emitted. `liquidate` is `whenNotPaused`; replay-proof (closed
 positions are inert, `PositionNotActive`); recipient-bound to `msg.sender`.
 
 **Who knows what:**
@@ -468,7 +474,7 @@ computed against different prices simply reverts; the submitter re-proves).
 1. **Single oracle, admin-set.** The owner can change the oracle (`setOracle`)
    and the staleness window. A compromised oracle can manipulate
    solvency/liquidation outcomes for proofs generated after the manipulation —
-   the standard PoC trust model; the admin still cannot touch custody.
+   the standard single-oracle trust model; the admin still cannot touch custody.
 2. **Prices are public inputs** — only the balances they multiply remain
    private.
 3. **Timestamp trust:** `updatedAt` is reported by the oracle itself.
@@ -491,31 +497,30 @@ VeilLend (via the existing owner-only setOracle)
 This exists ONLY to make the current Testnet deployment usable while Stork
 testnet feeds have no active publisher. Not production-secure, not a Stork
 replacement; isolated in `relay/` so it can be deleted without touching
-VeilLend. The M1-era `MockPriceOracle` (permissionless `setPrice`) is orphaned
-— the protocol no longer points at it.
+VeilLend. The permissionless `MockPriceOracle` is no longer pointed at by the
+protocol.
 
 **Production path (intended):**
 
 ```text
 Stork signed data  →  Stork on-chain update (pushOracleUpdate, permissionless)
         ↓
-VeilLend (StorkPriceOracle adapter: WETH → WETHUSD, USDC → USDCUSD)
+VeilLend (StorkPriceOracle adapter: USDC → USDCUSD)
 ```
 
 ### 10.3 Stork integration (deployed; publishing pending)
 
 Implemented behind the same freshness/bounds interface: `IPriceOracle` →
 `StorkPriceOracle` adapter → official Stork contract interface
-(`IStork`/`StorkStructs`), registry feed IDs for WETHUSD/USDCUSD, owner-only
+(`IStork`/`StorkStructs`), registry feed IDs (USDCUSD), owner-only
 per-asset feed registration, and a permissionless same-transaction flow — a
 publisher-signed snapshot is relayed through `VeilLend.pushOracleUpdate` and
 consumed by the user's ZK proof in one transaction. Local tests cover the full
 path against the mocked Stork interface (`test/stork-integration.test.ts`).
 
 The adapter is deployed on Testnet (`0xa2c0a60B4A360e88cA5f90860A3B75A3DDfED33D`) and wired to the real Stork
-contract with the official feeds (WETH → WETHUSD
-`0x8afba5f1a5d4969d23c3b42db1b88f8a9c8176392de5bf066752260478ce82b8`, USDC →
-USDCUSD `0x7416a56f222e196d0487dce8a1a8003936862e7a15092a91898d69fa8bce290c`);
+contract with the currently configured feed (USDC → USDCUSD
+`0x7416a56f222e196d0487dce8a1a8003936862e7a15092a91898d69fa8bce290c`);
 it becomes the active oracle once Stork
 testnet publishing starts (no subscriber relayer operates on Horizen yet —
 Stork's data API requires subscriber credentials). Multi-source aggregation,
@@ -537,12 +542,51 @@ circuits or position state.
   test).
 - UUPS upgrade authority is owner-only (`_authorizeUpgrade`); the upgrade
   swaps implementation code and adds no fund-moving capability (enforced by
-  ABI-whitelist and upgrade tests). No multisig/timelock governance yet —
-  tracked as M2 hardening work.
+  ABI-whitelist and upgrade tests). Multisig/timelock governance is part of
+  the production-hardening roadmap.
 - Oracle boundary `getFreshPrice` enforces freshness; borrow, withdraw and
   liquidate gate on it on-chain.
 
 ---
+
+## 11a. Liquidity Pool accounting (current implementation)
+
+Each supported debt asset is wired to its own independent UUPS `LiquidityPool`
+(ERC4626-style lender shares, one pool per asset, addresses in
+`deployments/liquidity-pools-horizenTestnet.json`). The accounting model:
+
+* **Borrow** — `VeilLend.borrow` (ZK-gated) pulls `amount` from the wired pool:
+  `pool.totalBorrows += amount`; the tokens go directly to the F5-bound
+  borrower.
+* **Repay** — VeilLend derives the principal/interest split from its own
+  per-position ledger (`borrowOutstanding` vs the repaid amount — the
+  aggregate `pool.totalBorrows` is never used to infer interest) and calls
+  `pool.onRepayment(principal, interest)`:
+  `totalBorrows -= principal`; the interest stays as idle balance (lender
+  yield via `totalAssets`) minus the protocol fee, which is ring-fenced in
+  `accruedFees` (fee = interest × feeBps / 10000, only on realized interest
+  — principal never generates a fee).
+* **Liquidation** — the settlement is split against the position's pool
+  principal: the recovered principal reduces `totalBorrows`; the UNRECOVERED
+  residual is realized bad debt via `pool.writeOffBorrows(residual)` —
+  `totalBorrows` and `totalAssets` drop together, socializing the loss across
+  lender shares. No ghost principal remains in the pool ledger, and the
+  settlement never realizes interest or protocol fees.
+* **Orphan settlement** — positions whose private witness was permanently
+  lost (testnet) are closed owner-only via `settleOrphanPosition(positionId)`.
+  The entire `supportedCollateral` is seized; `parityDebt` — its oracle
+  valuation in the debt asset — is a REFERENCE only. The owner pays the
+  actual pool debt: `poolDebtLeg = min(principalRecovered, pool.totalBorrows)`
+  where `principalRecovered = min(parityDebt, borrowOutstanding)`; the pool's
+  `totalBorrows` drops by the recovered principal and the unrecovered residual
+  is realized as bad debt via `pool.writeOffBorrows()`. The seized collateral
+  is transferred to the owner as the recovery payment — the value
+  difference between the collateral and the debt stays embedded in the
+  recovered collateral: it is not interest, generates no fee, and creates no
+  additional tokens. Both ledgers reconcile to zero.
+* `pool.totalBorrows == Σ borrowOutstanding` over open positions is the
+  maintained invariant; `projectedInterest` (from the synced `rateBps`) is
+  informational only and never backs shares.
 
 ## 12. Trust boundaries & important constraints (summary)
 
@@ -551,27 +595,28 @@ circuits or position state.
 | Position control | knowledge of `controlSecret` only; no plaintext owner on-chain |
 | Custody | `Σ supportedCollateral == collateralCustody == balanceOf(VeilLend)` per asset (tested invariant) |
 | Borrowing | in-circuit post-action solvency AND on-chain value-based borrow cap (`BorrowCapExceeded`) |
-| Liquidation | only eligible positions; replay-proof; recipient-bound; residual debt socialized (PoC) |
+| Liquidation | only eligible positions; replay-proof; recipient-bound; unrecovered residual realized via `writeOffBorrows` (socialized across lender shares) |
 | Oracle | single source, admin-set; freshness + bounds fail closed |
-| Admin | no fund-moving function; owner-only upgrades; no multisig/timelock yet |
-| Trusted setup | single deterministic contribution (PoC) — a real ceremony is required before any mainnet-style deployment; circuits unaudited |
+| Admin | no fund-moving function; owner-only upgrades; multisig/timelock governance is part of the production-hardening roadmap |
+| Trusted setup | single deterministic contribution — a real ceremony is required before any mainnet-style deployment; circuits unaudited |
 
 ## 13. Limitations (explicit)
 
-1. No liquidation incentive/bonus; residual hidden debt is socialized bad debt
-   with no reserve accounting yet.
+1. No liquidation incentive/bonus; unrecovered residual debt is written off
+   via the wired LiquidityPool (`writeOffBorrows`) and socialized across lender
+   share value (no separate reserve accounting).
 2. Witness availability: solvency/liquidation proofs require the private
    witness; decentralized witness disclosure (keepers) is future work.
 3. Single-oracle trust model; admin-set risk parameters (§10.1).
-4. No borrowable-liquidity supply side beyond repayments (borrow reserve =
-   `debtCustody` only).
+4. Borrowable liquidity comes from the per-asset LiquidityPools (§11a);
+   unrecoverable principal (borrower default) is socialized across lender
+   shares via `writeOffBorrows`.
 5. Per-action amounts public (§8) — position privacy, not transaction privacy.
-6. Trusted setup is a single deterministic contribution (PoC); circuits
-   unaudited.
-7. Testnet-only deployment. The CURRENT official Testnet deployment is the
-   UUPS deployment (ERC-1967 proxy `0xc1e2cDADBf14717DfEE7ffA23EAf2b21e6004a5B`); the M1 non-proxy deployment
-   is historical and was never upgraded. Testnet demo pricing runs through an
-   owner-gated oracle fed by the isolated Base-Chainlink relay (§10.2).
+6. Trusted setup is a single deterministic contribution; circuits unaudited.
+7. Testnet-only deployment: the official Testnet deployment is the UUPS
+   deployment (ERC-1967 proxy `0xc1e2cDADBf14717DfEE7ffA23EAf2b21e6004a5B`).
+   Testnet demo pricing runs through an owner-gated oracle fed by the isolated
+   Base-Chainlink relay (§10.2).
 
 ## 14. Reproducibility & repository layout
 
@@ -585,19 +630,20 @@ npm test           # full suite (unit + ZK + fuzz/invariant)
 VeilLend/
 ├── circuits/                     # veillend_lib + state_transition + solvency + risk_transition + liquidation
 ├── contracts/
-│   ├── VeilLend.sol              # protocol surface + 4 Groth16 verifier integrations (UUPS)
+│   ├── VeilLend.sol              # protocol surface + 4 Groth16 verifier integrations + per-asset pool wiring (UUPS)
+│   ├── LiquidityPool.sol         # per-debt-asset liquidity pool (ERC4626-style, UUPS)
 │   ├── oracles/                  # IPriceOracle, StorkPriceOracle, IStork, StorkStructs
 │   ├── zk/                       # generated, real verifiers (4)
-│   └── test/                     # TokenMock, MockPriceOracle, MockStorkOracle (test-only)
-├── scripts/                      # prove, deploy*, e2e*, proof-test, liquidation-test, verify-network
+│   └── test/                     # TokenMock, TokenMock6, MockPriceOracle, MockStorkOracle, OwnerMockPriceOracle, VeilLendV2Mock (test-only)
+├── scripts/                      # prove, deploy-liquidity-pools, upgrade-all, wire-liquidity-pools, pool E2E, validate-storage-layouts, verify-network
 ├── relay/                        # TESTNET/DEMO ONLY: Base Chainlink → Horizen OwnerMockPriceOracle relay
-├── test/                         # unit / ZK / solvency / risk / risk-gate / adversarial / liquidation / fuzz / invariant / upgrade / stork / e2e-lifecycle
-├── demo/                         # Next.js browser app (in-browser Groth16 proving)
-│   ├── app/                      # main page + /recovery-test + /sigtest
-│   ├── lib/                      # witness/poseidon/recovery/store/tx guard (see demo/lib/recovery/README.md)
+├── test/                         # unit / ZK / solvency / risk / risk-gate / adversarial / liquidation / fuzz / invariant / upgrade / stork / e2e-lifecycle / liquidity-pool
+├── demo/                         # Next.js browser app (in-browser Groth16 proving via Web Worker)
+│   ├── app/                      # dashboard + PoolPanel + /recovery-test + /sigtest
+│   ├── lib/                      # witness/poseidon/recovery/store/pool math/tx guard (see demo/lib/recovery/README.md)
 │   ├── public/zk/                # browser proving artifacts (wasm/zkey)
-│   └── tests/                    # persistence / recovery / signature-determinism
-├── deployments/                  # address book + deployment/E2E evidence records (JSON)
+│   └── tests/                    # persistence / recovery / signature-determinism / pool-math
+├── deployments/                  # address book + deployment/upgrade records (JSON)
 ├── docs/                         # ARCHITECTURE.md (this file), MILESTONES.md
 ├── README.md
 └── LICENSE                       # MIT (verifiers: GPL-3.0 per their headers)

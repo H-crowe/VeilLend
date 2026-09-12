@@ -8,7 +8,9 @@
  *   4 × Groth16 verifiers (decimal-normalized circuits)
  *   StorkPriceOracle adapter → REAL Stork push oracle (0xacC0…d62)
  *   VeilLend UUPS proxy (owner = deployer)
- *   Assets: vCOL+WETH+USDC collateral, vDBT+USDC debt; ZEN NOT enabled.
+ *   [HISTORICAL — do not re-run] Produced the CURRENT on-chain deployment
+ *   (2026-09-07). Superseded by scripts/upgrade-all.ts +
+ *   scripts/deploy-liquidity-pools.ts for the pool-era configuration.
  *
  * Run: npx hardhat run scripts/deploy-uups-stork.ts --network horizenTestnet
  * Writes deployments/horizenTestnet-uups.json (M1 record is preserved).
@@ -20,10 +22,8 @@ import { requireZkArtifacts } from "./prove";
 
 const EXPECTED_CHAIN_ID = 2651420n;
 const REAL_STORK = "0xacC0a0cF13571d30B4b8637996F5D6D774d4fd62";
-const WETH = "0x4200000000000000000000000000000000000006";
 const USDC = "0x01c7AEb2A0428b4159c0E333712f40e127aF639E";
 // Official Stork registry asset IDs (keccak256 of the plaintext pair id)
-const ETHUSD_FEED = ethers.id("ETHUSD");
 const USDCUSD_FEED = ethers.id("USDCUSD");
 
 const RATE = {
@@ -130,10 +130,8 @@ async function main() {
 
   // --- Configuration ---
   console.log("\nConfiguring…");
-  await txLogged("adapter.setFeedId(WETH, ETHUSD)", adapter.setFeedId(WETH, ETHUSD_FEED));
   await txLogged("adapter.setFeedId(USDC, USDCUSD)", adapter.setFeedId(USDC, USDCUSD_FEED));
   await txLogged("enableCollateralAsset(vCOL)", veil.enableCollateralAsset(addresses.collateralToken));
-  await txLogged("enableCollateralAsset(WETH)", veil.enableCollateralAsset(WETH));
   await txLogged("enableCollateralAsset(USDC)", veil.enableCollateralAsset(USDC));
   await txLogged("enableDebtAsset(vDBT)", veil.enableDebtAsset(addresses.debtToken, RATE));
   await txLogged("enableDebtAsset(USDC)", veil.enableDebtAsset(USDC, RATE));
@@ -149,13 +147,10 @@ async function main() {
   expectEqual(await veil.oracle(), addresses.storkPriceOracle, "oracle = StorkPriceOracle adapter");
   expectEqual(await adapter.storkOracle(), REAL_STORK, "adapter -> real Stork");
   expectEqual(await veil.collateralSupported(addresses.collateralToken), true, "vCOL collateral supported");
-  expectEqual(await veil.collateralSupported(WETH), true, "WETH collateral supported");
   expectEqual(await veil.collateralSupported(USDC), true, "USDC collateral supported");
   expectEqual(await veil.debtSupported(addresses.debtToken), true, "vDBT debt supported");
   expectEqual(await veil.debtSupported(USDC), true, "USDC debt supported");
-  expectEqual(await veil.assetDecimals(WETH), 18n, "WETH decimals recorded (18)");
   expectEqual(await veil.assetDecimals(USDC), 6n, "USDC decimals recorded (6)");
-  expectEqual(await adapter.feedIds(WETH), ETHUSD_FEED, "WETH feed = keccak(ETHUSD)");
   expectEqual(await adapter.feedIds(USDC), USDCUSD_FEED, "USDC feed = keccak(USDCUSD)");
   expectEqual(await veil.maxPriceStaleness(), 3600n, "maxPriceStaleness = 1h");
   // upgrades.deployProxy deploys its own implementation; the proxy's ERC-1967

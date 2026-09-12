@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Compile contracts
+        run: npx hardhat compile
+
+      - name: Lint contracts (solhint)
+        run: npx solhint "contracts/**/*.sol" --max-warnings 100000
+
+      - name: Full test suite (unit, ZK, e2e, invariant, pools, UUPS)
+        run: npx hardhat test
+
+      - name: UUPS storage-layout validation (offline)
+        run: npx hardhat run scripts/validate-storage-layouts.ts
+
+      - name: Demo tests (persistence, recovery, pool math)
+        run: |
+          cd demo
+          npm ci
+          npm test
+
+      - name: Build demo (Next.js production build)
+        run: |
+          cd demo
+          npm run build

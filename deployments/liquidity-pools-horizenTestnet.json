@@ -1,0 +1,96 @@
+{
+  "network": "horizenTestnet",
+  "chainId": "2651420",
+  "veilLendProxy": "0xc1e2cDADBf14717DfEE7ffA23EAf2b21e6004a5B",
+  "currentImplementation": "0x651f367A30525baE0fA1B1f67F6403550F794552",
+  "poolImplementation": {
+    "address": "0x9bc7ea7454D505bbf9B5A89DcA1f7d9a7F0B4443",
+    "deploymentTx": "0x208c1cc7c10c6bda891243d039ce960c9d661f2798152fd6f06ce04c4869702d",
+    "block": 27564575,
+    "gas": "2659688",
+    "explorerVerified": true
+  },
+  "canonicalPools": [
+    {
+      "label": "vDBT Pool",
+      "asset": "0xe48a8EC02EB14BB52Fe363D3B2A32e264d3B5D7f",
+      "assetDecimals": 18,
+      "proxy": "0x21Cf3FFE0FF3ccf422c89A0A55fCE1949C84fB57",
+      "deploymentTx": "0x250c7e9d28a479a3e022d412b4c3e1679dc0b7a8619465d2fe906cb573414172",
+      "deploymentBlock": 27564615,
+      "deploymentGas": "330523",
+      "setDebtPoolTx": "0x007ff76626538fb398581071bda465bcabb72ab98059ae20812d0aae1689b546",
+      "setDebtPoolBlock": 27564939,
+      "setDebtPoolGas": "95968",
+      "configurePoolTx": "0x63a33bdd1bd74aedd785926373eaf1b627679d1b076f221096dbd4d66c49ea68",
+      "configurePoolBlock": 27564998,
+      "configurePoolGas": "77357",
+      "feeBps": 1000,
+      "feeRecipient": "0x1725a9Ba5E788Ac73AE7f14a2C976DB462c5F204",
+      "rateBpsSynced": 500,
+      "explorerVerified": true
+    },
+    {
+      "label": "USDC Pool",
+      "asset": "0x01c7AEb2A0428b4159c0E333712f40e127aF639E",
+      "assetDecimals": 6,
+      "proxy": "0xf406448E519345C9D8bc08B606DaB677Cb12aCC1",
+      "deploymentTx": "0xf913142b3fc0a1b38851392209714011aa65884bfe572c497184bfdc373d2d30",
+      "deploymentBlock": 27564719,
+      "deploymentGas": "332635",
+      "setDebtPoolTx": "0xe032e73fa3e7b9ece7a5c90da8b4c999875e38dc354b626dfdd3deb4948d8143",
+      "setDebtPoolBlock": 27565041,
+      "setDebtPoolGas": "95968",
+      "configurePoolTx": "0xb02fc307b9e9f2dc4ffce557426a710f44e846fb97d9f80fd73f4b1b994859cc",
+      "configurePoolBlock": 27565120,
+      "configurePoolGas": "77357",
+      "feeBps": 1000,
+      "feeRecipient": "0x1725a9Ba5E788Ac73AE7f14a2C976DB462c5F204",
+      "rateBpsSynced": 500,
+      "explorerVerified": true
+    }
+  ],
+  "orphanDeployments": [
+    {
+      "label": "USDC Pool (duplicate from a deployment-script resume bug, fixed in scripts/deploy-liquidity-pools.ts)",
+      "proxy": "0x0F73B81BF555168d9Cc734A739617B6f5d923Ff0",
+      "asset": "0x01c7AEb2A0428b4159c0E333712f40e127aF639E",
+      "state": "EMPTY and UNWIRED: totalAssets=0, totalSupply=0, totalBorrows=0, availableLiquidity=0, USDC balance=0, rateBps=0, feeBps=0, feeRecipient=0x0",
+      "notWiredToVeilLend": true,
+      "action": "NONE — contracts cannot be deleted on-chain; it holds no funds and has no protocol effect"
+    }
+  ],
+  "wiring": {
+    "setDebtPool": "done for both canonical pools",
+    "feeBps": 1000,
+    "feeRecipient": "0x1725a9Ba5E788Ac73AE7f14a2C976DB462c5F204",
+    "borrowerRateBps": 500,
+    "rateSync": "automatic via VeilLend setDebtPool → LiquidityPool.updateRateBps"
+  },
+  "e2e": {
+    "lenderSupply": {
+      "vDBT": "0x7cb820c8d1c62924ba4bc0af550db940094bdc3ad80b35f7d5e04ac2a537c8c4",
+      "USDC": "0x02f5fdb1e8f06a8a75ca60fba8bcc991e32fdf28457a0980b2460b00478c2bbd"
+    },
+    "borrowerCycle": {
+      "deposit": "0xfd63776c401d29f5ce81db6e1c4701a1280bc391c38218a25d112d25d6868fd3",
+      "borrow": "0x0f5931c7ef2441a6a5ce8ce804668e0d45bc7eb8ed5ccdbbae28a77e2b2d0757",
+      "repay": "0x079883beb06d648d4a2b7cd57c78075f60aa39c0c8034aae630692c3e7982010",
+      "withdraw": "0x0c5a720b1c4c658c9bd7d344f711c1f9226979f11aebb97613e814c6a7ea2db4"
+    }
+  },
+  "implementation": "0x3c081adab71c5237ac3b21590dbbc60b26b5967d",
+  "usdcPoolImplementation": "0x3c081adab71c5237ac3b21590dbbc60b26b5967d",
+  "upgradeLog": [
+    {
+      "proxy": "0x21Cf3FFE0FF3ccf422c89A0A55fCE1949C84fB57",
+      "txHash": "0x45835342ce5eec90f038e2cc41da852e43066448f21f324401adee276daecc02",
+      "block": 27630753
+    },
+    {
+      "proxy": "0xf406448E519345C9D8bc08B606DaB677Cb12aCC1",
+      "txHash": "0x79c2b00c699ecc2e71e1b1ff6305fe4d12b974d21ff0778be613d04fd0bc5959",
+      "block": 27630762
+    }
+  ]
+}
